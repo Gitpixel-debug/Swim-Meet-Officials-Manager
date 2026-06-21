@@ -1,0 +1,31 @@
+{% extends "meets/layout.html" %}
+
+{% block title %}Referee Dashboard{% endblock %}
+
+{% block body %}
+
+<h2>Your Meets</h2>
+
+{% if meets %}
+<div class="row">
+    {% for meet in meets %}
+    <div class="col-md-6 mb-3">
+        <div class="card h-100">
+            <div class="card-body">
+                <h5 class="card-title">{{ meet.name }}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">{{ meet.location }}</h6>
+                <p class="card-text text-muted">{{ meet.start_date }} — {{ meet.end_date }}</p>
+                {% if meet.description %}
+                <p class="card-text">{{ meet.description|truncatechars:200 }}</p>
+                {% endif %}
+                <a class="btn btn-primary" href="{% url 'meet-home' meet.id %}">Open Meet</a>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+    <p class="text-muted">You haven't created any meets yet. <a href="{% url 'meet-create' %}">Create one</a>.</p>
+{% endif %}
+
+{% endblock %}

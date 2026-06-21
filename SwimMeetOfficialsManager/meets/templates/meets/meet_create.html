@@ -1,0 +1,83 @@
+{% extends 'meets/layout.html' %}
+{% block title %}Create Meet{% endblock %}
+{% block body %}
+
+<div class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+
+            <div class="card shadow-lg border-0 rounded-4">
+                <div class="card-header bg-primary text-white rounded-top-4">
+                    <h3 class="mb-0 fw-semibold">Create New Meet</h3>
+                </div>
+
+                <div class="card-body p-4">
+
+                    <form method="POST">
+                        {% csrf_token %}
+
+                        {% if form.non_field_errors %}
+                        <div class="mb-3">
+                            <div class="alert alert-danger">{{ form.non_field_errors }}</div>
+                        </div>
+                        {% endif %}
+
+                        <!-- Basic Info -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Meet Name</label>
+                                {{ form.name }}
+                                {{ form.name.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Location</label>
+                                {{ form.location }}
+                                {{ form.location.errors }}
+                            </div>
+                        </div>
+
+                        <!-- Dates -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Start Date</label>
+                                {{ form.start_date }}
+                                {{ form.start_date.errors }}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">End Date</label>
+                                {{ form.end_date }}
+                                {{ form.end_date.errors }}
+                            </div>
+                        </div>
+
+                        <!-- Description -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Description</label>
+                            {{ form.description }}
+                            {{ form.description.errors }}
+                        </div>
+
+                        <!-- Sessions -->
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold">Number of Sessions</label>
+                            {{ form.num_sessions }}
+                            {{ form.num_sessions.errors }}
+                        </div>
+
+                        <!-- Submit -->
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg rounded-3">
+                                Create Meet
+                            </button>
+                        </div>
+
+                    </form>
+
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,6 @@
+{% extends 'meets/layout.html' %}
+{% block body %}
+<div class="alert alert-success">
+  Thank you, {{ assignment.official.get_full_name }} — you are checked in for {{ assignment.session }}.
+</div>
+{% endblock %}

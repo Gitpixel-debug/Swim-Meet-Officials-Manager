@@ -1,0 +1,35 @@
+{% extends "meets/layout.html" %}
+
+{% block title %}Register (Referee){% endblock %}
+
+{% block body %}
+
+<div class="container d-flex align-items-center justify-content-center" style="min-height:60vh">
+    <div class="card p-4 shadow-sm" style="max-width:520px; width:100%" data-aos="fade-up">
+        <h3 class="mb-3">Register (Referee)</h3>
+
+        {% if message %}
+            <div class="alert alert-warning">{{ message }}</div>
+        {% endif %}
+
+        <form action="{% url 'register' %}" method="post">
+            {% csrf_token %}
+            <div class="mb-3">
+                <input class="form-control" autofocus type="text" name="member_id" placeholder="Member ID">
+            </div>
+            <div class="mb-3">
+                <input class="form-control" type="password" name="password" placeholder="Password">
+            </div>
+            <div class="mb-3">
+                <input class="form-control" type="password" name="confirmation" placeholder="Confirm Password">
+            </div>
+            <div class="d-flex gap-2">
+                <input class="btn btn-custom btn-referee flex-grow-1" type="submit" value="Register">
+                <a href="{% url 'login' %}" class="btn btn-outline-secondary">Login</a>
+            </div>
+        </form>
+
+    </div>
+</div>
+
+{% endblock %}

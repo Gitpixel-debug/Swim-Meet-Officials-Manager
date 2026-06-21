@@ -1,0 +1,38 @@
+{% extends 'meets/layout.html' %}
+
+{% block title %}Swim Meet Officials Manager - Home{% endblock %}
+
+{% block body %}
+{% if user.is_authenticated %}
+    <!-- Authenticated User View -->
+    <div class="container">
+        <div class="row">
+            <div class="col-md-8 offset-md-2">
+                <h2 class="mb-4" data-aos="fade-down">Welcome, {{ user.get_full_name|default:user.username }}!</h2>
+                
+                <div class="btn-group d-flex gap-3 mb-5" data-aos="fade-up">
+                    <a href="{% url 'meet-create' %}" class="btn btn-custom btn-referee flex-grow-1">
+                        📋 Create Meet (Referees)
+                    </a>
+                    <a href="{% url 'official-dashboard' %}" class="btn btn-custom btn-official flex-grow-1">
+                        📊 Official Dashboard
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <!-- Hero Section for Unauthenticated Users -->
+    <section class="hero">
+        <div data-aos="fade-up">
+            <h1>Welcome to Swim Meet Officials Manager</h1>
+            <p>Manage swim meets efficiently with separate referee and official portals</p>
+
+            <div class="d-flex justify-content-center gap-4 mt-5">
+                <a href="{% url 'login' %}" class="btn btn-custom btn-referee">Login</a>
+                <a href="{% url 'register' %}" class="btn btn-outline-success">Register</a>
+            </div>
+        </div>
+    </section>
+{% endif %}
+{% endblock %}

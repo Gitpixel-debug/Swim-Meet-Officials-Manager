@@ -1,0 +1,33 @@
+/* controls spacing between buttons */
+.button-group .big-btn {
+  margin: 0 15px;     /* ← change this number for spacing */
+}
+
+/* makes buttons larger */
+.big-btn {
+  font-size: 1.3rem;  /* bigger text */
+  padding: 12px 28px; /* taller + wider */
+  border-radius: 10px;
+}
+
+/* Added modern form styling for meet create */
+body {
+  background: linear-gradient(to right, #eef2f7, #dde6f2);
+}
+
+.card {
+  transition: 0.3s ease;
+}
+
+.card:hover {
+  transform: translateY(-3px);
+}
+
+.form-control:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.25);
+}
+
+.btn-primary {
+  font-weight: 600;
+}

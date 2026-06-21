@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Code</title>
+</head>
+<body>
+    <div style="font-family: Arial, sans-serif; padding: 16px;">
+        <h2>{{ meet_name }} — Join Code</h2>
+        <p>Hello,</p>
+        <p>Your join code for {{ meet_name }} is:</p>
+        <p style="font-size: 20px; font-weight: bold;">{{ join_code }}</p>
+        {% if check_in_url %}
+        <p>You may check in using the following link:</p>
+        <p><a href="{{ check_in_url }}">Check in</a></p>
+        {% endif %}
+        <p>Thanks,<br/>{{ sender_name }}</p>
+    </div>
+</body>
+</html>

@@ -1,0 +1,186 @@
+{% extends "meets/layout.html" %}
+
+{% block body %}
+
+<div class="container" data-aos="fade-up">
+  <div class="card p-4 shadow-sm">
+    <h2 class="mb-2">{{ session.meet.name }} — Session {{ session.session_number }}</h2>
+    <p class="text-muted mb-2">{{ session.date }} · {{ session.start_time }} - {{ session.end_time }}</p>
+
+        <div class="d-flex align-items-center justify-content-between mt-3">
+            <div>
+                        <a class="btn btn-outline-secondary me-2" href="{% url 'meet-home' session.meet.id %}">Back to Meet</a>
+                        {% if request.user == session.meet.created_by %}
+                            <a class="btn btn-sm btn-outline-primary me-2" href="{% url 'deck-assignments' session.id %}">Manage Deck Assignments</a>
+                        {% endif %}
+
+                    {% if user_assignment %}
+                        {% if session.date == today %}
+                            {% if not user_assignment.checked_in %}
+                                <form method="post" action="{% url 'self-check-in' session.id %}" style="display:inline">{% csrf_token %}
+                                    <button class="btn btn-success" type="submit">Check In</button>
+                                </form>
+                            {% endif %}
+                        {% elif session.date > today %}
+                            <form method="post" action="{% url 'leave-session' user_assignment.id %}" style="display:inline">{% csrf_token %}
+                                <button class="btn btn-outline-danger" type="submit">Leave</button>
+                            </form>
+                        {% endif %}
+                    {% endif %}
+
+        {% if request.user == session.meet.created_by %}
+        <form method="post" action="{% url 'delete-session-csv' session.id %}" style="display:inline" onsubmit="return confirm('Delete all CSV-imported assignments for this session?')">
+            {% csrf_token %}
+            <button class="btn btn-danger" type="submit">Delete CSV</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <hr>
+
+    <h4>Checked-in Officials</h4>
+
+    <div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Certifications</th>
+                <th>Hours</th>
+                <th>Actions</th>
+                <th>Check-in</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for assignment in checked_assignments %}
+            <tr>
+                <td>{{ assignment.official.get_full_name }}</td>
+                <td>{{ assignment.official.phone }}</td>
+                <td>{{ assignment.official.email }}</td>
+                <td>
+                    {% for cert in assignment.official.certifications.all %}
+                        {{ cert }}{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+                <td>{{ assignment.hours_worked }}</td>
+                <td>
+                    {% if request.user == session.meet.created_by %}
+                    <form method="post" action="{% url 'send-join-code' session.id assignment.id %}" style="display:inline">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-primary" type="submit">Share</button>
+                    </form>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if assignment.checked_in %}
+                        <span class="badge bg-success">Checked In</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Not Checked In</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">No officials have checked in yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    {% if uploaded_assignments %}
+    <hr>
+    <h4>Uploaded (Not Checked-in)</h4>
+    <div class="table-responsive">
+    <table class="table table-sm">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Club</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for assignment in uploaded_assignments %}
+            <tr>
+                <td>{{ assignment.official.get_full_name }}</td>
+                <td>{{ assignment.official.email }}</td>
+                <td>
+                    {% if assignment.imported_official %}
+                        {{ assignment.imported_official.club }}
+                    {% endif %}
+                </td>
+                <td>
+                    <form method="post" action="{% url 'send-join-code' session.id assignment.id %}" style="display:inline">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-primary" type="submit">Share</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% endif %}
+
+    <hr>
+    <h4>Officials Joined This Session</h4>
+    <div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Certifications</th>
+                <th>Hours</th>
+                <th>Actions</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for a in all_assignments %}
+            <tr>
+                <td>{{ a.official.get_full_name }}</td>
+                <td>{{ a.official.phone }}</td>
+                <td>{{ a.official.email }}</td>
+                <td>
+                    {% for cert in a.official.certifications.all %}
+                        {{ cert }}{% if not forloop.last %}, {% endif %}
+                    {% endfor %}
+                </td>
+                <td>{{ a.hours_worked }}</td>
+                <td>
+                    {% if request.user == session.meet.created_by %}
+                    <form method="post" action="{% url 'send-join-code' session.id a.id %}" style="display:inline">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-outline-primary" type="submit">Share</button>
+                    </form>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if a.checked_in %}
+                        <span class="badge bg-success">Checked In</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Not Checked In</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="7">No officials have joined this session yet.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+  </div>
+</div>
+
+{% endblock %}
+

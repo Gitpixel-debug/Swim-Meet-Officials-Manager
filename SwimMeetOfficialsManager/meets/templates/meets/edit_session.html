@@ -1,0 +1,11 @@
+<!-- templates/meets/edit_session.html -->
+
+{% extends 'meets/layout.html' %}
+{% block body %}
+    <h1>Edit Session</h1>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Save</button>
+    </form>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "meets/layout.html" %}
+
+{% block body %}
+
+<div class="container" data-aos="fade-up">
+    <div class="card p-4 shadow-sm">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+            <h2 class="mb-0">{{ meet.name }}</h2>
+                    {% if request.user.is_authenticated and request.user == meet.created_by %}
+                <div>
+                    <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addSessionModal">Add Session</button>
+                </div>
+            {% endif %}
+        </div>
+        <p class="mb-1"><strong>Location:</strong> {{ meet.location }}</p>
+        <p class="mb-1"><strong>Dates:</strong> {{ meet.start_date }} → {{ meet.end_date }}</p>
+
+        <hr>
+
+        <h4>Sessions</h4>
+        <form method="post" action="{% url 'join-sessions-from-meet' meet.id %}">{% csrf_token %}
+        <ul class="list-group">
+            {% for session in sessions %}
+            <li class="list-group-item d-flex justify-content-between align-items-center" 
+                data-session-id="{{ session.id }}" data-session-number="{{ session.session_number }}" data-session-date="{{ session.date }}" data-session-start="{{ session.start_time }}" data-session-end="{{ session.end_time }}" data-href="{% url 'session-home' session.id %}" style="cursor:pointer;">
+                <div>
+                    <label class="form-check-label">
+                        <input class="form-check-input me-2" type="checkbox" name="session_ids" value="{{ session.id }}" {% if session.id in user_session_ids %}checked{% endif %}>
+                        <strong>Session {{ session.session_number }}</strong>
+                    </label>
+                    <div class="text-muted small">{{ session.date }} · {{ session.start_time }} - {{ session.end_time }}</div>
+                </div>
+                <div>
+                    {% if request.user == meet.created_by %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-2 edit-session-btn">Edit</button>
+                        <a href="{% url 'delete-session' session.id %}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Delete session?');">Delete</a>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        <div class="mt-3">
+            <button class="btn btn-primary btn-sm" type="submit">Join selected sessions</button>
+        </div>
+        </form>
+        
+        <hr>
+        <h4>Officials by Session</h4>
+        <div class="mt-2">
+            {% for session in sessions %}
+                <div class="mb-2">
+                    <strong>Session {{ session.session_number }}:</strong>
+                    {% if session.joined_assignments %}
+                        <span class="small text-muted">
+                        {% for a in session.joined_assignments %}
+                            <span class="me-2">{{ a.official.get_full_name|default:a.official.username }}{% if a.official == meet.created_by %} (Referee){% endif %}</span>
+                        {% endfor %}
+                        </span>
+                    {% else %}
+                        <span class="text-muted small">No officials joined</span>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+<!-- Add/Edit Session Modal -->
+<div class="modal fade" id="addSessionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form id="session-form" method="post" action="{% url 'add-session' meet.id %}">{% csrf_token %}
+            <div class="modal-header">
+                <h5 class="modal-title">Add / Edit Session</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2">
+                    <label class="form-label">Session Number</label>
+                    <input name="session_number" id="modal-session-number" class="form-control" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Date</label>
+                    <input name="date" id="modal-session-date" type="date" class="form-control" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">Start Time</label>
+                    <input name="start_time" id="modal-session-start" type="time" class="form-control" />
+                </div>
+                <div class="mb-2">
+                    <label class="form-label">End Time</label>
+                    <input name="end_time" id="modal-session-end" type="time" class="form-control" />
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function(){
+    var editBtns = document.querySelectorAll('.edit-session-btn');
+    editBtns.forEach(function(btn){
+        btn.addEventListener('click', function(e){
+            e.stopPropagation();
+            var li = btn.closest('li');
+            var sid = li.getAttribute('data-session-id');
+            var sn = li.getAttribute('data-session-number');
+            var date = li.getAttribute('data-session-date');
+            var start = li.getAttribute('data-session-start');
+            var end = li.getAttribute('data-session-end');
+            document.getElementById('modal-session-number').value = sn;
+            document.getElementById('modal-session-date').value = date;
+            document.getElementById('modal-session-start').value = start;
+            document.getElementById('modal-session-end').value = end;
+            var form = document.getElementById('session-form');
+            form.action = '{% url "add-session" meet.id %}';
+            // switch to edit endpoint
+            if(sid){
+                form.action = '{% url "edit_session" 0 %}'.replace('/0/', '/' + sid + '/');
+            }
+            var modal = new bootstrap.Modal(document.getElementById('addSessionModal'));
+            modal.show();
+        });
+    });
+
+    // make the entire list-item clickable (except for inputs, buttons, anchors)
+    var items = document.querySelectorAll('.list-group-item[data-href]');
+    items.forEach(function(item){
+        item.addEventListener('click', function(e){
+            var tag = (e.target.tagName || '').toLowerCase();
+            if(tag === 'input' || tag === 'button' || tag === 'a' || e.target.closest('button') || e.target.closest('a')){
+                return;
+            }
+            var href = item.getAttribute('data-href');
+            if(href){ window.location = href; }
+        });
+    });
+});
+</script>
+
+{% endblock %}
