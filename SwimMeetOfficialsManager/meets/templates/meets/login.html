@@ -13,56 +13,93 @@
                 {% endif %}
 
                 <div id="email-login-area">
-                    <div class="mb-3">
-                        <input id="email-input" autofocus class="form-control" type="email" name="email" placeholder="Email address">
-                    </div>
-                    <div class="mb-3 d-flex gap-2">
-                        <button id="request-code-btn" class="btn btn-primary flex-grow-1">Request Code</button>
-                        <a href="{% url 'register' %}" class="btn btn-outline-secondary">Register</a>
-                    </div>
-
-                    <div id="verify-area" style="display:none">
+                    <form id="request-code-form" method="post" action="{% url 'request-login-code' %}">
+                        {% csrf_token %}
                         <div class="mb-3">
-                            <input id="code-input" class="form-control" type="text" name="code" placeholder="Enter code">
+                            <input id="email-input" autofocus class="form-control" type="email" name="email" placeholder="Email address" value="{{ email|default:'' }}" required>
                         </div>
-                        <div class="d-flex gap-2">
-                            <button id="verify-code-btn" class="btn btn-success flex-grow-1">Verify & Login</button>
+                        <div class="mb-3 d-flex gap-2">
+                            <button id="request-code-btn" type="submit" class="btn btn-primary flex-grow-1">Request Code</button>
+                            <a href="{% url 'register' %}" class="btn btn-outline-secondary">Register</a>
                         </div>
-                    </div>
+                    </form>
+
+                    <form id="verify-code-form" method="post" action="{% url 'verify-login-code' %}">
+                        {% csrf_token %}
+                        <div id="verify-area" style="display:{% if show_verify %}block{% else %}none{% endif %}">
+                            <input id="verify-email-input" type="hidden" name="email" value="{{ email|default:'' }}">
+                            <div class="mb-3">
+                                <input id="code-input" class="form-control" type="text" name="code" placeholder="Enter code" inputmode="numeric" autocomplete="one-time-code">
+                            </div>
+                            <div class="d-flex gap-2">
+                                <button id="verify-code-btn" type="submit" class="btn btn-success flex-grow-1">Verify & Login</button>
+                            </div>
+                        </div>
+                    </form>
                     <div id="email-login-feedback" class="mt-3"></div>
                 </div>
 
                 <script>
-                async function postForm(url, data){
-                    const resp = await fetch(url, {method:'POST', headers:{'X-CSRFToken': '{{ csrf_token }}'}, body:new URLSearchParams(data)});
-                    return resp.json();
+                function getCookie(name) {
+                    const value = `; ${document.cookie}`;
+                    const parts = value.split(`; ${name}=`);
+                    if (parts.length === 2) {
+                        return parts.pop().split(';').shift();
+                    }
+                    return '';
                 }
 
-                document.getElementById('request-code-btn').addEventListener('click', async function(e){
+                async function submitJson(form, data) {
+                    const response = await fetch(form.action, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': getCookie('csrftoken'),
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: new URLSearchParams(data)
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        throw new Error(payload.message || payload.status || 'Request failed');
+                    }
+                    return payload;
+                }
+
+                document.getElementById('request-code-form').addEventListener('submit', async function(e){
                     e.preventDefault();
                     const email = document.getElementById('email-input').value.trim();
-                    if(!email) return alert('Enter your email');
-                    const res = await fetch('{% url "request-login-code" %}', {method:'POST', headers:{'X-CSRFToken':'{{ csrf_token }}'}, body:new URLSearchParams({email})});
-                    const j = await res.json();
-                    if(j.status === 'sent'){
-                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-success">Code sent to '+email+'</div>';
-                        document.getElementById('verify-area').style.display = 'block';
-                    } else {
-                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-danger">Failed to send code</div>';
+                    if(!email) {
+                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-warning">Enter your email.</div>';
+                        return;
+                    }
+                    try {
+                        const j = await submitJson(this, {email});
+                        if(j.status === 'sent'){
+                            document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-success">Code sent to '+email+'</div>';
+                            document.getElementById('verify-email-input').value = email;
+                            document.getElementById('verify-area').style.display = 'block';
+                        }
+                    } catch (error) {
+                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-danger">'+error.message+'</div>';
                     }
                 });
 
-                document.getElementById('verify-code-btn').addEventListener('click', async function(e){
+                document.getElementById('verify-code-form').addEventListener('submit', async function(e){
                     e.preventDefault();
                     const email = document.getElementById('email-input').value.trim();
                     const code = document.getElementById('code-input').value.trim();
-                    if(!email||!code) return alert('Enter email and code');
-                    const res = await fetch('{% url "verify-login-code" %}', {method:'POST', headers:{'X-CSRFToken':'{{ csrf_token }}'}, body:new URLSearchParams({email, code})});
-                    const j = await res.json();
-                    if(j.status === 'ok'){
-                        window.location = '{% url "official-dashboard" %}';
-                    } else {
-                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-danger">'+(j.status||'Invalid code')+'</div>';
+                    if(!email || !code) {
+                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-warning">Enter your email and code.</div>';
+                        return;
+                    }
+                    try {
+                        const j = await submitJson(this, {email, code});
+                        if(j.status === 'ok'){
+                            window.location = '{% url "official-dashboard" %}';
+                        }
+                    } catch (error) {
+                        document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-danger">'+error.message+'</div>';
+                        document.getElementById('verify-area').style.display = 'block';
                     }
                 });
                 </script>

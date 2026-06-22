@@ -326,6 +326,10 @@ def _generate_code(n=6):
     return ''.join(random.choices(string.digits, k=n))
 
 
+def _wants_json_response(request):
+    return request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+
 def request_login_code(request):
     """Send a one-time code to the provided email for login/registration."""
     if request.method != 'POST':
@@ -339,6 +343,7 @@ def request_login_code(request):
     exp_key = f'login_code_exp_{email}'
     request.session[key] = code
     request.session[exp_key] = (timezone.now() + timedelta(minutes=10)).isoformat()
+    request.session['pending_login_email'] = email
     try:
         send_mail(
             'Your login code',
@@ -348,8 +353,12 @@ def request_login_code(request):
             fail_silently=False,
         )
     except Exception:
-        return JsonResponse({'status': 'email_failed'}, status=500)
-    return JsonResponse({'status': 'sent'})
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'email_failed', 'message': 'Unable to send the login code. Check email settings and try again.'}, status=500)
+        return redirect(f"{reverse('login')}?message=Unable+to+send+the+login+code.+Check+email+settings+and+try+again.&email={email}")
+    if _wants_json_response(request):
+        return JsonResponse({'status': 'sent'})
+    return redirect(f"{reverse('login')}?message=Code+sent+to+{email}&email={email}&verify=1")
 
 
 def verify_login_code(request):
@@ -364,9 +373,13 @@ def verify_login_code(request):
     stored = request.session.get(key)
     exp = request.session.get(exp_key)
     if not stored or stored != code:
-        return JsonResponse({'status': 'invalid_code'}, status=400)
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'invalid_code'}, status=400)
+        return redirect(f"{reverse('login')}?message=Invalid+code.&email={email}&verify=1")
     if exp and dateparse.parse_datetime(exp) < timezone.now():
-        return JsonResponse({'status': 'expired'}, status=400)
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'expired'}, status=400)
+        return redirect(f"{reverse('login')}?message=That+code+has+expired.+Request+a+new+one.&email={email}")
 
     # find or create user by email or roster
     User = get_user_model()
@@ -397,7 +410,10 @@ def verify_login_code(request):
         del request.session[exp_key]
     except Exception:
         pass
-    return JsonResponse({'status': 'ok'})
+    request.session.pop('pending_login_email', None)
+    if _wants_json_response(request):
+        return JsonResponse({'status': 'ok'})
+    return redirect('official-dashboard')
 
 
 @login_required
@@ -626,6 +642,10 @@ def login_view(request):
     except Exception:
         # don't block login if roster load fails
         pass
+    message = request.GET.get('message') or ''
+    email = request.GET.get('email') or request.session.get('pending_login_email') or ''
+    show_verify = request.GET.get('verify') == '1' or bool(email)
+
     if request.method == "POST":
         member_id = request.POST.get("member_id")
         password = request.POST.get("password")
@@ -674,7 +694,11 @@ def login_view(request):
             "message": "Invalid member ID and/or password."
         })
     else:
-        return render(request, "meets/login.html")
+        return render(request, "meets/login.html", {
+            "message": message,
+            "email": email,
+            "show_verify": show_verify,
+        })
 
 
 def logout_view(request):
