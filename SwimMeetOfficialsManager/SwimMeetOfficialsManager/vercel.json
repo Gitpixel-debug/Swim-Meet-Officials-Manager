@@ -1,9 +1,15 @@
 {
   "version": 2,
+  "builds": [
+    {
+      "src": "SwimMeetOfficialsManager/wsgi.py",
+      "use": "@vercel/python"
+    }
+  ],
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "your_project_name/wsgi.py"
+      "dest": "SwimMeetOfficialsManager/wsgi.py"
     }
   ]
 }
