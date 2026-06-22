@@ -23,14 +23,41 @@
     </div>
 {% else %}
     <!-- Hero Section for Unauthenticated Users -->
-    <section class="hero">
-        <div data-aos="fade-up">
-            <h1>Welcome to Swim Meet Officials Manager</h1>
-            <p>Manage swim meets efficiently with separate referee and official portals</p>
+    <section class="hero mb-5">
+        <div data-aos="fade-up" class="container">
+            <h1 class="display-4 fw-bold">Elevate Your Swim Meet Management</h1>
+            <p class="lead">The all-in-one platform for swim meet referees to manage their deck, assign officials to sessions, and ensure a smoothly run meet, while empowering officials to easily sign up and review their assignments.</p>
 
             <div class="d-flex justify-content-center gap-4 mt-5">
                 <a href="{% url 'login' %}" class="btn btn-custom btn-referee">Login</a>
-                <a href="{% url 'register' %}" class="btn btn-outline-success">Register</a>
+                <a href="{% url 'register' %}" class="btn btn-custom btn-official">Register</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section class="features py-5 bg-white">
+        <div class="container" data-aos="fade-up">
+            <h2 class="text-center mb-5">Why Choose Us?</h2>
+            <div class="row text-center">
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm p-4">
+                        <h4 class="card-title text-primary">For Referees</h4>
+                        <p class="card-text text-muted mt-3">Easily create multi-session meets, manage officials' certifications, approve join requests, and automate deck assignments.</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm p-4">
+                        <h4 class="card-title text-success">For Officials</h4>
+                        <p class="card-text text-muted mt-3">Sign up using a simple invite link, declare your availability per session, and effortlessly view your assignments on deck.</p>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="card h-100 border-0 shadow-sm p-4">
+                        <h4 class="card-title text-info">Seamless Operations</h4>
+                        <p class="card-text text-muted mt-3">From real-time automated assignments to handling no-shows, keep your meet running efficiently without the manual spreadsheet hassle.</p>
+                    </div>
+                </div>
             </div>
         </div>
     </section>

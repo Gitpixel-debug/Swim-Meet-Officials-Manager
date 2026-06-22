@@ -29,10 +29,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 # Create your views here.
 def index(request):
-    # If authenticated, show official dashboard; otherwise send to login page
-    if request.user and request.user.is_authenticated:
-        return redirect('official-dashboard')
-    return redirect('login')
+    return render(request, 'meets/index.html')
 
 from django.contrib.auth.decorators import login_required
 from .forms import MeetCreateForm
