@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-zn)og29s2tj+n@rn2eq)x2=n53*#!0t@l)l8$snan9-synkq$n
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', 'swim-meet-officials-manager.vercel.app']
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', 'testserver', 'swim-meet-officials-manager-m101rp4jl.vercel.app']
 
 
 # Application definition
