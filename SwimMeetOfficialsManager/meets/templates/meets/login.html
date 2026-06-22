@@ -28,6 +28,7 @@
                         {% csrf_token %}
                         <div id="verify-area" style="display:{% if show_verify %}block{% else %}none{% endif %}">
                             <input id="verify-email-input" type="hidden" name="email" value="{{ email|default:'' }}">
+                            <input id="verify-token-input" type="hidden" name="token" value="{{ token|default:'' }}">
                             <div class="mb-3">
                                 <input id="code-input" class="form-control" type="text" name="code" placeholder="Enter code" inputmode="numeric" autocomplete="one-time-code">
                             </div>
@@ -77,6 +78,7 @@
                         if(j.status === 'sent'){
                             document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-success">Code sent to '+email+'</div>';
                             document.getElementById('verify-email-input').value = email;
+                            document.getElementById('verify-token-input').value = j.token || '';
                             document.getElementById('verify-area').style.display = 'block';
                         }
                     } catch (error) {
@@ -88,12 +90,13 @@
                     e.preventDefault();
                     const email = document.getElementById('email-input').value.trim();
                     const code = document.getElementById('code-input').value.trim();
-                    if(!email || !code) {
+                    const token = document.getElementById('verify-token-input').value.trim();
+                    if(!email || !code || !token) {
                         document.getElementById('email-login-feedback').innerHTML = '<div class="alert alert-warning">Enter your email and code.</div>';
                         return;
                     }
                     try {
-                        const j = await submitJson(this, {email, code});
+                        const j = await submitJson(this, {email, code, token});
                         if(j.status === 'ok'){
                             window.location = '{% url "official-dashboard" %}';
                         }

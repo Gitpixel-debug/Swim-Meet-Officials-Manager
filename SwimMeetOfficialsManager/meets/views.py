@@ -26,6 +26,8 @@ from django.views.decorators.http import require_POST
 from django.db.models import Q
 from .services.deck_assignment import generate_deck_assignments, finalize_and_save_assignments, CERT_ROLE_MAP, _official_cert_codes
 from django.views.decorators.csrf import csrf_exempt
+from django.core import signing
+from django.core.signing import BadSignature, SignatureExpired
 
 # Create your views here.
 def index(request):
@@ -338,12 +340,7 @@ def request_login_code(request):
     if not email:
         return JsonResponse({'status': 'missing_email'}, status=400)
     code = _generate_code()
-    # store code and expiry in session
-    key = f'login_code_{email}'
-    exp_key = f'login_code_exp_{email}'
-    request.session[key] = code
-    request.session[exp_key] = (timezone.now() + timedelta(minutes=10)).isoformat()
-    request.session['pending_login_email'] = email
+    token = signing.dumps({'email': email, 'code': code}, salt='login-code')
     try:
         send_mail(
             'Your login code',
@@ -357,8 +354,8 @@ def request_login_code(request):
             return JsonResponse({'status': 'email_failed', 'message': 'Unable to send the login code. Check email settings and try again.'}, status=500)
         return redirect(f"{reverse('login')}?message=Unable+to+send+the+login+code.+Check+email+settings+and+try+again.&email={email}")
     if _wants_json_response(request):
-        return JsonResponse({'status': 'sent'})
-    return redirect(f"{reverse('login')}?message=Code+sent+to+{email}&email={email}&verify=1")
+        return JsonResponse({'status': 'sent', 'token': token})
+    return redirect(f"{reverse('login')}?message=Code+sent+to+{email}&email={email}&verify=1&token={token}")
 
 
 def verify_login_code(request):
@@ -366,20 +363,26 @@ def verify_login_code(request):
         return JsonResponse({'status': 'bad_method'}, status=405)
     email = request.POST.get('email')
     code = request.POST.get('code')
-    if not email or not code:
+    token = request.POST.get('token')
+    if not email or not code or not token:
         return JsonResponse({'status': 'missing'}, status=400)
-    key = f'login_code_{email}'
-    exp_key = f'login_code_exp_{email}'
-    stored = request.session.get(key)
-    exp = request.session.get(exp_key)
-    if not stored or stored != code:
-        if _wants_json_response(request):
-            return JsonResponse({'status': 'invalid_code'}, status=400)
-        return redirect(f"{reverse('login')}?message=Invalid+code.&email={email}&verify=1")
-    if exp and dateparse.parse_datetime(exp) < timezone.now():
+    try:
+        payload = signing.loads(token, salt='login-code', max_age=600)
+    except SignatureExpired:
         if _wants_json_response(request):
             return JsonResponse({'status': 'expired'}, status=400)
         return redirect(f"{reverse('login')}?message=That+code+has+expired.+Request+a+new+one.&email={email}")
+    except BadSignature:
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'invalid_code'}, status=400)
+        return redirect(f"{reverse('login')}?message=Invalid+code.&email={email}&verify=1")
+
+    token_email = payload.get('email')
+    token_code = payload.get('code')
+    if token_email != email or token_code != code:
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'invalid_code'}, status=400)
+        return redirect(f"{reverse('login')}?message=Invalid+code.&email={email}&verify=1")
 
     # find or create user by email or roster
     User = get_user_model()
@@ -404,13 +407,6 @@ def verify_login_code(request):
 
     # log in the user
     login(request, user)
-    # cleanup
-    try:
-        del request.session[key]
-        del request.session[exp_key]
-    except Exception:
-        pass
-    request.session.pop('pending_login_email', None)
     if _wants_json_response(request):
         return JsonResponse({'status': 'ok'})
     return redirect('official-dashboard')
@@ -643,7 +639,8 @@ def login_view(request):
         # don't block login if roster load fails
         pass
     message = request.GET.get('message') or ''
-    email = request.GET.get('email') or request.session.get('pending_login_email') or ''
+    email = request.GET.get('email') or ''
+    token = request.GET.get('token') or ''
     show_verify = request.GET.get('verify') == '1' or bool(email)
 
     if request.method == "POST":
@@ -697,6 +694,7 @@ def login_view(request):
         return render(request, "meets/login.html", {
             "message": message,
             "email": email,
+            "token": token,
             "show_verify": show_verify,
         })
 
