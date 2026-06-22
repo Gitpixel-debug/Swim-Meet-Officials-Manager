@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "SwimMeetOfficialsManager/wsgi.py",
+      "src": "SwimMeetOfficialsManager/SwimMeetOfficialsManager/wsgi.py",
       "use": "@vercel/python"
     }
   ],
