@@ -132,10 +132,16 @@ AUTH_USER_MODEL = 'meets.User'
 STATIC_URL = 'static/'
 
 # Email settings default to console in local debug, but allow Vercel env override.
-if os.getenv('VERCEL') is None:
-    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-else:
-    EMAIL_BACKEND = 'resend.django.ResendBackend'
-    RESEND_API_KEY = os.getenv('RESEND_API_KEY')
+import os
 
-DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'onboarding@resend.dev')
+# --- EMAIL CONFIGURATION (RESEND API) ---
+INSTALLED_APPS += ['anymail']  # This registers Anymail in Django
+
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
+
+ANYMAIL = {
+    "RESEND_API_KEY": os.environ.get("RESEND_API_KEY"),
+}
+
+# Resend requires 'onboarding@resend.dev' for free/unverified domains
+DEFAULT_FROM_EMAIL = "onboarding@resend.dev" 
