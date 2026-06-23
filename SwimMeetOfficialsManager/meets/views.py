@@ -21,6 +21,7 @@ import math
 from django.db.models import Sum
 import random
 import string
+import logging
 from django.utils import dateparse
 from django.views.decorators.http import require_POST
 from django.db.models import Q
@@ -28,6 +29,8 @@ from .services.deck_assignment import generate_deck_assignments, finalize_and_sa
 from django.views.decorators.csrf import csrf_exempt
 from django.core import signing
 from django.core.signing import BadSignature, SignatureExpired
+
+logger = logging.getLogger(__name__)
 
 # Create your views here.
 def index(request):
@@ -553,8 +556,6 @@ def delete_session_csv(request, session_id):
 def load_roster_if_empty():
     # Path resolved relative to this file so it works on any deployment (Vercel, local, etc.)
     csv_path = os.path.join(os.path.dirname(__file__), 'data', 'roster.csv')
-    if RosterEntry.objects.exists():
-        return
     if not os.path.exists(csv_path):
         return
 
@@ -570,15 +571,28 @@ def load_roster_if_empty():
             if not member_id:
                 continue
             try:
-                entry = RosterEntry.objects.create(member_id=member_id, first_name=first_name, last_name=last_name, email=email, club=club)
+                entry, _created = RosterEntry.objects.update_or_create(
+                    member_id=member_id,
+                    defaults={
+                        'first_name': first_name,
+                        'last_name': last_name,
+                        'email': email,
+                        'club': club,
+                    },
+                )
             except Exception:
+                logger.exception('Failed to upsert roster entry %s', member_id)
                 continue
             # save certs
             cert_columns = ['reg','apt','bgc','cpt','ao-a','ao-c','cj-a','cj-c','dr-a','dr-c','sr-a','sr-c','st-a','st-c']
             for cert_col in cert_columns:
                 val = row.get(cert_col)
                 if val:
-                    RosterCertification.objects.create(roster=entry, name=cert_col, value=val)
+                    RosterCertification.objects.update_or_create(
+                        roster=entry,
+                        name=cert_col,
+                        defaults={'value': val},
+                    )
 
 # meets/views.py
 
@@ -713,51 +727,51 @@ def register(request):
         pass
     
     if request.method == "POST":
-        member_id = request.POST.get("member_id")
-        email = request.POST.get("email")
-
-        if not member_id or not email:
-            return render(request, "meets/register.html", {
-                "message": "Enter your member ID and email."
-            })
-
-        # Validate member_id exists in roster
-        roster = None
         try:
-            roster = RosterEntry.objects.get(member_id__iexact=member_id)
-        except RosterEntry.DoesNotExist:
-            return render(request, "meets/register.html", {
-                "message": "Invalid member ID."
-            })
+            member_id = (request.POST.get("member_id") or '').strip()
+            email = (request.POST.get("email") or '').strip()
 
-        # Optionally enforce roster email match if roster has an email
-        roster_email = (roster.email or '').strip()
-        if roster_email and roster_email.lower() != (email or '').strip().lower():
-            return render(request, "meets/register.html", {
-                "message": "Provided email does not match roster record."
-            })
+            if not member_id or not email:
+                return render(request, "meets/register.html", {
+                    "message": "Enter your member ID and email."
+                })
 
-        # Check if user already registered
-        user = User.objects.filter(username=member_id).first()
-        if user:
-            return render(request, "meets/register.html", {
-                "message": "Member ID already registered."
-            })
+            # Validate member_id exists in roster
+            try:
+                roster = RosterEntry.objects.get(member_id__iexact=member_id)
+            except RosterEntry.DoesNotExist:
+                return render(request, "meets/register.html", {
+                    "message": "Invalid member ID."
+                })
 
-        # Create user with unusable password (passwordless flow)
-        try:
-            user = User.objects.create_user(member_id, email)
+            # Optionally enforce roster email match if roster has an email
+            roster_email = (roster.email or '').strip()
+            if roster_email and roster_email.lower() != email.lower():
+                return render(request, "meets/register.html", {
+                    "message": "Provided email does not match roster record."
+                })
+
+            # Check if user already registered
+            user = User.objects.filter(username=member_id).first()
+            if user:
+                return render(request, "meets/register.html", {
+                    "message": "Member ID already registered."
+                })
+
+            # Create user with unusable password (passwordless flow)
+            user = User.objects.create_user(username=member_id, email=email)
             user.set_unusable_password()
             user.first_name = roster.first_name or ''
             user.last_name = roster.last_name or ''
             user.save()
-        except IntegrityError:
-            return render(request, "meets/register.html", {
-                "message": "Registration failed. Try again."
-            })
 
-        login(request, user)
-        return HttpResponseRedirect(reverse("official-dashboard"))
+            login(request, user)
+            return HttpResponseRedirect(reverse("official-dashboard"))
+        except Exception:
+            logger.exception('Registration failed for member_id=%s', request.POST.get('member_id'))
+            return render(request, "meets/register.html", {
+                "message": "Registration failed unexpectedly. Please try again."
+            })
     else:
         return render(request, "meets/register.html")
 
