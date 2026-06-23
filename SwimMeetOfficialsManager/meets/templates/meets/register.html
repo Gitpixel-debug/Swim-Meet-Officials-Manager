@@ -18,10 +18,10 @@
                 <input class="form-control" autofocus type="text" name="member_id" placeholder="Member ID">
             </div>
             <div class="mb-3">
-                <input class="form-control" type="password" name="password" placeholder="Password">
+                <input class="form-control" type="email" name="email" placeholder="Email address" required>
             </div>
-            <div class="mb-3">
-                <input class="form-control" type="password" name="confirmation" placeholder="Confirm Password">
+            <div class="alert alert-info small mb-3">
+                Registration is passwordless. Your email must match the roster record for this member ID.
             </div>
             <div class="d-flex gap-2">
                 <input class="btn btn-custom btn-referee flex-grow-1" type="submit" value="Register">
