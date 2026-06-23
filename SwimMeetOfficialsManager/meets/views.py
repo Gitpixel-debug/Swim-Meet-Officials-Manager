@@ -62,22 +62,52 @@ def meet_create(request):
             start = meet.start_date
             end = meet.end_date or meet.start_date
             days = (end - start).days + 1
-            sessions_per_day = math.ceil(total_sessions / days)
-            default_start_times = ["08:00", "12:00", "16:00", "20:00"]
-            for i in range(1, total_sessions + 1):
-                day_index = (i - 1) // sessions_per_day
-                session_date = start + timedelta(days=day_index)
-                time_idx = (i - 1) % len(default_start_times)
-                start_time = default_start_times[time_idx]
-                # default end time 4 hours later
-                end_time = "12:00" if start_time == "08:00" else "16:00" if start_time == "12:00" else "20:00" if start_time == "16:00" else "23:00"
-                Session.objects.create(
-                    meet=meet,
-                    session_number=i,
-                    date=session_date,
-                    start_time=start_time,
-                    end_time=end_time
-                )
+            days_count = max(days, 1)
+
+            if days_count == 1:
+                sessions_per_day = [total_sessions]
+            else:
+                found = False
+                for x in range(total_sessions, 0, -1):
+                    y = total_sessions - (days_count - 1) * x
+                    if 0 < y < x:
+                        sessions_per_day = [y] + [x] * (days_count - 1)
+                        found = True
+                        break
+                if not found:
+                    for x in range(total_sessions, 0, -1):
+                        y = total_sessions - (days_count - 1) * x
+                        if 0 <= y <= x:
+                            sessions_per_day = [y] + [x] * (days_count - 1)
+                            found = True
+                            break
+                if not found:
+                    sessions_per_day = [0] * days_count
+                    rem = total_sessions
+                    for d_idx in range(days_count - 1, -1, -1):
+                        if d_idx == 0:
+                            sessions_per_day[d_idx] = rem
+                        else:
+                            val = math.ceil(rem / (d_idx + 1))
+                            sessions_per_day[d_idx] = val
+                            rem -= val
+
+            session_num = 1
+            for day_idx, count_for_day in enumerate(sessions_per_day):
+                session_date = start + timedelta(days=day_idx)
+                for j in range(count_for_day):
+                    start_hour = (8 + j * 4) % 24
+                    end_hour = (12 + j * 4) % 24
+                    start_time = f"{start_hour:02d}:00"
+                    end_time = f"{end_hour:02d}:00"
+                    Session.objects.create(
+                        meet=meet,
+                        session_number=session_num,
+                        date=session_date,
+                        start_time=start_time,
+                        end_time=end_time
+                    )
+                    session_num += 1
 
             return redirect("meet-home", meet_id=meet.id)
     else:
@@ -97,15 +127,45 @@ def meet_home(request, meet_id):
         user_session_ids = set(SessionAssignment.objects.filter(session__meet=meet, official=request.user).values_list('session__id', flat=True))
     # build per-session joined officials mapping
     # prepare sessions list and attach assignments per session for template convenience
-    sessions_list = list(meet.sessions.all())
+    sessions_list = list(meet.sessions.all().order_by('session_number'))
     for s in sessions_list:
         s.joined_assignments = list(SessionAssignment.objects.filter(session=s).select_related('official'))
+
+    # Prefill calculations for adding a new session
+    last_day_date = (meet.end_date or meet.start_date).strftime('%Y-%m-%d') if (meet.end_date or meet.start_date) else ''
+    
+    last_session = meet.sessions.order_by('session_number').last()
+    if last_session:
+        next_session_number = last_session.session_number + 1
+        
+        import datetime as dt
+        try:
+            last_start = last_session.start_time
+            dummy_datetime = dt.datetime.combine(dt.date.today(), last_start)
+            next_start_dt = dummy_datetime + dt.timedelta(hours=4)
+            next_session_start = next_start_dt.time().strftime('%H:%M')
+            
+            last_end = last_session.end_time
+            dummy_end_datetime = dt.datetime.combine(dt.date.today(), last_end)
+            next_end_dt = dummy_end_datetime + dt.timedelta(hours=4)
+            next_session_end = next_end_dt.time().strftime('%H:%M')
+        except Exception:
+            next_session_start = '08:00'
+            next_session_end = '12:00'
+    else:
+        next_session_number = 1
+        next_session_start = '08:00'
+        next_session_end = '12:00'
 
     return render(request, "meets/meet_home.html", {
         "meet": meet,
         "sessions": sessions_list,
         "joined_officials": joined_officials,
         "user_session_ids": user_session_ids,
+        "next_session_number": next_session_number,
+        "next_session_date": last_day_date,
+        "next_session_start": next_session_start,
+        "next_session_end": next_session_end,
     })
 
 
@@ -172,7 +232,7 @@ def deck_assignments(request, session_id):
     if request.user != session.meet.created_by:
         return HttpResponseForbidden('Not allowed')
 
-    checked = SessionAssignment.objects.filter(session=session, checked_in=True).select_related('official')
+    checked = SessionAssignment.objects.filter(session=session).select_related('official')
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'generate':

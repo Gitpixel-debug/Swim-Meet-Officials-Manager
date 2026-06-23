@@ -49,8 +49,8 @@ def generate_deck_assignments(session):
     Generate assignments for a session.
     Returns dict: {official_id: {'role': role, 'break_schedule': [...]} }
     """
-    # Consider only officials checked-in for the session
-    checked = SessionAssignment.objects.filter(session=session, checked_in=True).select_related('official')
+    # Consider all officials associated with the session
+    checked = SessionAssignment.objects.filter(session=session).select_related('official')
     officials = [sa.official for sa in checked]
 
     # build eligibility

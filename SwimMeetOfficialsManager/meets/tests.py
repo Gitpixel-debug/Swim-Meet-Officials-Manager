@@ -11,29 +11,42 @@ class OfficialCertificationsTest(TestCase):
     def test_official_dashboard_shows_certifications(self):
         """Test that official dashboard displays certifications from roster"""
         
-        # Step 1: Register as official
+        # Step 1: Register as official (Step 1 of OTP)
         resp = self.client.post('/official/register', {
+            'action': 'request_code',
             'member_id': 'C4B74D3D9829E2',
-            'password': 'testpass123',
-            'confirmation': 'testpass123'
-        }, follow=True)
-        
+            'email': 'kamal.choudhary@gmail.com'
+        })
         self.assertEqual(resp.status_code, 200)
         
-        # Step 2: Verify user was created
+        token = resp.context['token']
+        
+        # Pull code from mail outbox
+        from django.core import mail
+        self.assertEqual(len(mail.outbox), 1)
+        email_body = mail.outbox[0].body
+        import re
+        code_match = re.search(r'Your registration code is:\s+(\d+)', email_body)
+        self.assertTrue(code_match, "Code not found in email!")
+        code = code_match.group(1)
+        
+        # Step 2: Verify code (Step 2 of OTP)
+        resp = self.client.post('/official/register', {
+            'action': 'verify_code',
+            'member_id': 'C4B74D3D9829E2',
+            'email': 'kamal.choudhary@gmail.com',
+            'code': code,
+            'token': token
+        }, follow=True)
+        self.assertEqual(resp.status_code, 200)
+        
+        # Step 3: Verify user was created
         user = User.objects.get(username='C4B74D3D9829E2')
         self.assertEqual(user.first_name, 'Kamal')
         self.assertEqual(user.last_name, 'Choudhary')
         
-        # Step 3: Login
-        self.client.logout()
-        logged_in = self.client.login(
-            username='C4B74D3D9829E2',
-            password='testpass123'
-        )
-        self.assertTrue(logged_in, "Login should succeed")
-        
         # Step 4: Access dashboard
+        self.client.force_login(user)
         resp = self.client.get('/official/dashboard', follow=True)
         self.assertEqual(resp.status_code, 200)
         content = resp.content.decode()

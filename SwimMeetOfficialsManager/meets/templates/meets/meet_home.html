@@ -8,7 +8,11 @@
             <h2 class="mb-0">{{ meet.name }}</h2>
                     {% if request.user.is_authenticated and request.user == meet.created_by %}
                 <div>
-                    <button class="btn btn-sm btn-primary me-2" data-bs-toggle="modal" data-bs-target="#addSessionModal">Add Session</button>
+                    <button class="btn btn-sm btn-primary me-2" id="add-session-btn" data-bs-toggle="modal" data-bs-target="#addSessionModal"
+                            data-next-number="{{ next_session_number }}"
+                            data-next-date="{{ next_session_date }}"
+                            data-next-start="{{ next_session_start }}"
+                            data-next-end="{{ next_session_end }}">Add Session</button>
                 </div>
             {% endif %}
         </div>
@@ -22,7 +26,7 @@
         <ul class="list-group">
             {% for session in sessions %}
             <li class="list-group-item d-flex justify-content-between align-items-center" 
-                data-session-id="{{ session.id }}" data-session-number="{{ session.session_number }}" data-session-date="{{ session.date }}" data-session-start="{{ session.start_time }}" data-session-end="{{ session.end_time }}" data-href="{% url 'session-home' session.id %}" style="cursor:pointer;">
+                data-session-id="{{ session.id }}" data-session-number="{{ session.session_number }}" data-session-date="{{ session.date|date:'Y-m-d' }}" data-session-start="{{ session.start_time|time:'H:i' }}" data-session-end="{{ session.end_time|time:'H:i' }}" data-href="{% url 'session-home' session.id %}" style="cursor:pointer;">
                 <div>
                     <label class="form-check-label">
                         <input class="form-check-input me-2" type="checkbox" name="session_ids" value="{{ session.id }}" {% if session.id in user_session_ids %}checked{% endif %}>
@@ -43,25 +47,6 @@
             <button class="btn btn-primary btn-sm" type="submit">Join selected sessions</button>
         </div>
         </form>
-        
-        <hr>
-        <h4>Officials by Session</h4>
-        <div class="mt-2">
-            {% for session in sessions %}
-                <div class="mb-2">
-                    <strong>Session {{ session.session_number }}:</strong>
-                    {% if session.joined_assignments %}
-                        <span class="small text-muted">
-                        {% for a in session.joined_assignments %}
-                            <span class="me-2">{{ a.official.get_full_name|default:a.official.username }}{% if a.official == meet.created_by %} (Referee){% endif %}</span>
-                        {% endfor %}
-                        </span>
-                    {% else %}
-                        <span class="text-muted small">No officials joined</span>
-                    {% endif %}
-                </div>
-            {% endfor %}
-        </div>
     </div>
 </div>
 <!-- Add/Edit Session Modal -->
@@ -102,6 +87,18 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function(){
+    var addBtn = document.getElementById('add-session-btn');
+    if (addBtn) {
+        addBtn.addEventListener('click', function(e){
+            document.getElementById('modal-session-number').value = addBtn.getAttribute('data-next-number') || '';
+            document.getElementById('modal-session-date').value = addBtn.getAttribute('data-next-date') || '';
+            document.getElementById('modal-session-start').value = addBtn.getAttribute('data-next-start') || '';
+            document.getElementById('modal-session-end').value = addBtn.getAttribute('data-next-end') || '';
+            var form = document.getElementById('session-form');
+            form.action = '{% url "add-session" meet.id %}';
+        });
+    }
+
     var editBtns = document.querySelectorAll('.edit-session-btn');
     editBtns.forEach(function(btn){
         btn.addEventListener('click', function(e){

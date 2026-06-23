@@ -225,7 +225,7 @@
             <div class="mt-3">
                 {% for cert in certifications %}
                     <span class="cert-badge">
-                        {{ cert.name }}{% if cert.expiry_date %} (expires {{ cert.expiry_date }}){% endif %}
+                        {{ cert.name|upper }}{% if cert.expiry_date %} (expires {{ cert.expiry_date }}){% endif %}
                     </span>
                 {% empty %}
                     <p class="text-muted">No certifications on file.</p>
@@ -355,6 +355,16 @@
         sidebar.addEventListener('hidden.bs.collapse', syncToggleVisibility);
         window.addEventListener('resize', syncToggleVisibility);
         syncToggleVisibility();
+
+        // Hide sidebar when clicking outside of it on tablet/mobile views
+        document.addEventListener('click', function (e) {
+            if (window.innerWidth < 992 && sidebar.classList.contains('show')) {
+                if (!sidebar.contains(e.target) && !toggle.contains(e.target)) {
+                    const bsCollapse = bootstrap.Collapse.getOrCreateInstance(sidebar, { toggle: false });
+                    bsCollapse.hide();
+                }
+            }
+        });
     })();
 </script>
 </body>
