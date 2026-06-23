@@ -13,9 +13,46 @@
 
 .sidebar-toggle {
     position: fixed;
-    top: 12px;
-    left: 12px;
+    top: 0;
+    left: 0;
     z-index: 1050;
+    width: 108px;
+    height: 84px;
+    border: none;
+    border-radius: 0 0 16px 0;
+    background: #1f2a3a;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+}
+
+.sidebar-toggle:hover,
+.sidebar-toggle:focus {
+    background: #243246;
+}
+
+.sidebar-toggle.hidden-by-sidebar {
+    display: none !important;
+}
+
+.menu-icon {
+    width: 74px;
+    height: 54px;
+    border-radius: 12px;
+    border: 2px solid rgba(207, 216, 227, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 7px;
+}
+
+.menu-icon span {
+    width: 36px;
+    height: 4px;
+    border-radius: 4px;
+    background: #aab7c9;
 }
 
 .dashboard-shell {
@@ -149,8 +186,12 @@
 
 <body class="dashboard-body">
 
-<button class="btn btn-dark sidebar-toggle d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#dashboardSidebar" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Toggle navigation">
-    Menu
+<button id="sidebarToggle" class="sidebar-toggle d-lg-none" type="button" data-bs-toggle="collapse" data-bs-target="#dashboardSidebar" aria-controls="dashboardSidebar" aria-expanded="false" aria-label="Toggle navigation">
+    <span class="menu-icon" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+    </span>
 </button>
 
 <div class="dashboard-shell">
@@ -294,6 +335,28 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    (function () {
+        const sidebar = document.getElementById('dashboardSidebar');
+        const toggle = document.getElementById('sidebarToggle');
+        if (!sidebar || !toggle) {
+            return;
+        }
+
+        const syncToggleVisibility = () => {
+            if (window.innerWidth >= 992) {
+                toggle.classList.add('hidden-by-sidebar');
+                return;
+            }
+            toggle.classList.toggle('hidden-by-sidebar', sidebar.classList.contains('show'));
+        };
+
+        sidebar.addEventListener('shown.bs.collapse', syncToggleVisibility);
+        sidebar.addEventListener('hidden.bs.collapse', syncToggleVisibility);
+        window.addEventListener('resize', syncToggleVisibility);
+        syncToggleVisibility();
+    })();
+</script>
 </body>
 </html>
  
