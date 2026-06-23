@@ -551,8 +551,8 @@ def delete_session_csv(request, session_id):
 
 
 def load_roster_if_empty():
-    # path to the provided CSV file (adjust if you place it elsewhere)
-    csv_path = r"c:\Users\zorro\Programming\Private Roster PNS Jan 2026.xlsx - 09.06.2025.csv"
+    # Path resolved relative to this file so it works on any deployment (Vercel, local, etc.)
+    csv_path = os.path.join(os.path.dirname(__file__), 'data', 'roster.csv')
     if RosterEntry.objects.exists():
         return
     if not os.path.exists(csv_path):
