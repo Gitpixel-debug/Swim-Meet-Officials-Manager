@@ -11,5 +11,8 @@
       "src": "/(.*)",
       "dest": "SwimMeetOfficialsManager/wsgi.py"
     }
-  ]
+  ],
+  "build": {
+    "command": "python manage.py migrate"
+  }
 }
