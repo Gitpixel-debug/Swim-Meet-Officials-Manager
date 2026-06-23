@@ -14,18 +14,36 @@
 
         <form action="{% url 'register' %}" method="post">
             {% csrf_token %}
+            <input type="hidden" name="action" value="request_code">
             <div class="mb-3">
-                <input class="form-control" autofocus type="text" name="member_id" placeholder="Member ID">
+                <input class="form-control" autofocus type="text" name="member_id" placeholder="Member ID" value="{{ member_id|default:'' }}" required>
             </div>
             <div class="mb-3">
-                <input class="form-control" type="email" name="email" placeholder="Email address" required>
+                <input class="form-control" type="email" name="email" placeholder="Email address" value="{{ email|default:'' }}" required>
             </div>
             <div class="alert alert-info small mb-3">
-                Registration is passwordless. Your email must match the roster record for this member ID.
+                Registration is passwordless. Enter your member ID and roster email to receive a verification code.
             </div>
             <div class="d-flex gap-2">
-                <input class="btn btn-custom btn-referee flex-grow-1" type="submit" value="Register">
+                <input class="btn btn-custom btn-referee flex-grow-1" type="submit" value="Request Verification Code">
                 <a href="{% url 'login' %}" class="btn btn-outline-secondary">Login</a>
+            </div>
+        </form>
+
+        <form action="{% url 'register' %}" method="post" class="mt-3">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="verify_code">
+            <input type="hidden" name="member_id" value="{{ member_id|default:'' }}">
+            <input type="hidden" name="email" value="{{ email|default:'' }}">
+            <input type="hidden" name="token" value="{{ token|default:'' }}">
+
+            <div id="register-verify-area" style="display:{% if show_verify %}block{% else %}none{% endif %}">
+                <div class="mb-3">
+                    <input class="form-control" type="text" name="code" placeholder="Enter verification code" inputmode="numeric" autocomplete="one-time-code">
+                </div>
+                <div class="d-grid">
+                    <button class="btn btn-success" type="submit">Verify Code & Register</button>
+                </div>
             </div>
         </form>
 

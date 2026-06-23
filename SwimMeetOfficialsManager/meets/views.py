@@ -335,6 +335,27 @@ def _wants_json_response(request):
     return request.headers.get('x-requested-with') == 'XMLHttpRequest'
 
 
+def _validate_registration_identity(member_id, email):
+    member_id = (member_id or '').strip()
+    email = (email or '').strip()
+    if not member_id or not email:
+        return None, 'Enter your member ID and email.'
+
+    try:
+        roster = RosterEntry.objects.get(member_id__iexact=member_id)
+    except RosterEntry.DoesNotExist:
+        return None, 'Invalid member ID.'
+
+    roster_email = (roster.email or '').strip()
+    if roster_email and roster_email.lower() != email.lower():
+        return None, 'Provided email does not match roster record.'
+
+    if User.objects.filter(username=member_id).exists():
+        return None, 'Member ID already registered.'
+
+    return roster, None
+
+
 def request_login_code(request):
     """Send a one-time code to the provided email for login/registration."""
     if request.method != 'POST':
@@ -726,54 +747,138 @@ def register(request):
         # don't block registration if roster load fails
         pass
     
+    message = request.GET.get('message') or ''
+    member_id = request.GET.get('member_id') or ''
+    email = request.GET.get('email') or ''
+    token = request.GET.get('token') or ''
+    show_verify = request.GET.get('verify') == '1' or bool(token)
+
     if request.method == "POST":
-        try:
-            member_id = (request.POST.get("member_id") or '').strip()
-            email = (request.POST.get("email") or '').strip()
+        action = request.POST.get('action') or 'request_code'
+        member_id = (request.POST.get("member_id") or '').strip()
+        email = (request.POST.get("email") or '').strip()
 
-            if not member_id or not email:
+        if action == 'request_code':
+            roster, err = _validate_registration_identity(member_id, email)
+            if err:
                 return render(request, "meets/register.html", {
-                    "message": "Enter your member ID and email."
+                    "message": err,
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
                 })
 
-            # Validate member_id exists in roster
+            code = _generate_code()
+            token = signing.dumps({'member_id': member_id, 'email': email, 'code': code}, salt='register-code')
             try:
-                roster = RosterEntry.objects.get(member_id__iexact=member_id)
-            except RosterEntry.DoesNotExist:
+                send_mail(
+                    'Your registration code',
+                    f'Your registration code is: {code}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [email],
+                    fail_silently=False,
+                )
+            except Exception:
                 return render(request, "meets/register.html", {
-                    "message": "Invalid member ID."
+                    "message": "Unable to send verification code. Check email settings and try again.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
                 })
 
-            # Optionally enforce roster email match if roster has an email
-            roster_email = (roster.email or '').strip()
-            if roster_email and roster_email.lower() != email.lower():
+            return render(request, "meets/register.html", {
+                "message": f"Code sent to {email}.",
+                "member_id": member_id,
+                "email": email,
+                "token": token,
+                "show_verify": True,
+            })
+
+        if action == 'verify_code':
+            code = (request.POST.get('code') or '').strip()
+            token = (request.POST.get('token') or '').strip()
+            if not member_id or not email or not code or not token:
                 return render(request, "meets/register.html", {
-                    "message": "Provided email does not match roster record."
+                    "message": "Enter your member ID, email, and verification code.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": token,
+                    "show_verify": True,
                 })
 
-            # Check if user already registered
-            user = User.objects.filter(username=member_id).first()
-            if user:
+            try:
+                payload = signing.loads(token, salt='register-code', max_age=600)
+            except SignatureExpired:
                 return render(request, "meets/register.html", {
-                    "message": "Member ID already registered."
+                    "message": "That code has expired. Request a new one.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+            except BadSignature:
+                return render(request, "meets/register.html", {
+                    "message": "Invalid verification code.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
                 })
 
-            # Create user with unusable password (passwordless flow)
-            user = User.objects.create_user(username=member_id, email=email)
-            user.set_unusable_password()
-            user.first_name = roster.first_name or ''
-            user.last_name = roster.last_name or ''
-            user.save()
+            if payload.get('member_id') != member_id or payload.get('email') != email or payload.get('code') != code:
+                return render(request, "meets/register.html", {
+                    "message": "Invalid verification code.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": token,
+                    "show_verify": True,
+                })
+
+            roster, err = _validate_registration_identity(member_id, email)
+            if err:
+                return render(request, "meets/register.html", {
+                    "message": err,
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+
+            try:
+                user = User.objects.create_user(username=member_id, email=email)
+                user.set_unusable_password()
+                user.first_name = roster.first_name or ''
+                user.last_name = roster.last_name or ''
+                user.save()
+            except IntegrityError:
+                return render(request, "meets/register.html", {
+                    "message": "Registration failed. Try again.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
 
             login(request, user)
             return HttpResponseRedirect(reverse("official-dashboard"))
-        except Exception:
-            logger.exception('Registration failed for member_id=%s', request.POST.get('member_id'))
-            return render(request, "meets/register.html", {
-                "message": "Registration failed unexpectedly. Please try again."
-            })
-    else:
-        return render(request, "meets/register.html")
+
+        return render(request, "meets/register.html", {
+            "message": "Invalid registration action.",
+            "member_id": member_id,
+            "email": email,
+            "token": token,
+            "show_verify": show_verify,
+        })
+
+    return render(request, "meets/register.html", {
+        "message": message,
+        "member_id": member_id,
+        "email": email,
+        "token": token,
+        "show_verify": show_verify,
+    })
 
 
 # ===============================
