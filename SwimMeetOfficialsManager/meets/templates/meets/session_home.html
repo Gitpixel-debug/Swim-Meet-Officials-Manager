@@ -60,10 +60,11 @@
                 </td>
                 <td>{{ assignment.hours_worked }}</td>
                 <td>
-                    {% if request.user == session.meet.created_by %}
-                    <form method="post" action="{% url 'send-join-code' session.id assignment.id %}" style="display:inline">
+                    {% if is_meet_referee and meet_started %}
+                    <form method="post" action="{% url 'set-assignment-check-in' assignment.id %}" style="display:inline">
                         {% csrf_token %}
-                        <button class="btn btn-sm btn-outline-primary" type="submit">Notify</button>
+                        <input type="hidden" name="checked_in" value="0">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                     </form>
                     {% endif %}
                 </td>
@@ -108,10 +109,13 @@
                     {% endif %}
                 </td>
                 <td>
-                    <form method="post" action="{% url 'send-join-code' session.id assignment.id %}" style="display:inline">
+                    {% if is_meet_referee and meet_started %}
+                    <form method="post" action="{% url 'set-assignment-check-in' assignment.id %}" style="display:inline">
                         {% csrf_token %}
-                        <button class="btn btn-sm btn-outline-primary" type="submit">Notify</button>
+                        <input type="hidden" name="checked_in" value="1">
+                        <button class="btn btn-sm btn-success" type="submit">Check In</button>
                     </form>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
@@ -148,10 +152,16 @@
                 </td>
                 <td>{{ a.hours_worked }}</td>
                 <td>
-                    {% if request.user == session.meet.created_by %}
-                    <form method="post" action="{% url 'send-join-code' session.id a.id %}" style="display:inline">
+                    {% if is_meet_referee and meet_started %}
+                    <form method="post" action="{% url 'set-assignment-check-in' a.id %}" style="display:inline">
                         {% csrf_token %}
-                        <button class="btn btn-sm btn-outline-primary" type="submit">Notify</button>
+                        {% if a.checked_in %}
+                        <input type="hidden" name="checked_in" value="0">
+                        <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
+                        {% else %}
+                        <input type="hidden" name="checked_in" value="1">
+                        <button class="btn btn-sm btn-success" type="submit">Check In</button>
+                        {% endif %}
                     </form>
                     {% endif %}
                 </td>

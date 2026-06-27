@@ -214,6 +214,9 @@ def session_home(request, session_id):
 
     # all officials who have joined this session (checked-in or not)
     all_assignments = SessionAssignment.objects.filter(session=session).select_related('official')
+    today = timezone.now().date()
+    is_meet_referee = request.user.is_authenticated and request.user == session.meet.created_by
+    meet_started = bool(session.meet.start_date and session.meet.start_date <= today)
 
     return render(request, "meets/session_home.html", {
         "session": session,
@@ -221,7 +224,9 @@ def session_home(request, session_id):
         "uploaded_assignments": uploaded_assignments,
         "user_assignment": user_assignment,
         "all_assignments": all_assignments,
-        "today": timezone.now().date(),
+        "today": today,
+        "is_meet_referee": is_meet_referee,
+        "meet_started": meet_started,
     })
 
 
@@ -306,6 +311,7 @@ def deck_assignments(request, session_id):
 
     # Compute allowed roles per official based on their certifications
     for sa in checked:
+        val = existing.get(sa.official_id) or existing.get(str(sa.official_id)) or {}
         try:
             codes = _official_cert_codes(sa.official)
         except Exception:
@@ -618,6 +624,32 @@ def self_check_in(request, session_id):
     assignment.checked_in = True
     assignment.save()
     messages.success(request, 'You are checked in for this session.')
+    return redirect('session-home', session_id=session.id)
+
+
+@login_required
+@require_POST
+def set_assignment_check_in(request, assignment_id):
+    assignment = get_object_or_404(SessionAssignment, pk=assignment_id)
+    session = assignment.session
+    meet = session.meet
+
+    if request.user != meet.created_by:
+        return HttpResponseForbidden('Not allowed')
+
+    today = timezone.now().date()
+    if not meet.start_date or meet.start_date > today:
+        messages.error(request, 'Check-in controls are available only after the meet has started.')
+        return redirect('session-home', session_id=session.id)
+
+    target = (request.POST.get('checked_in') or '').strip()
+    assignment.checked_in = (target == '1')
+    assignment.save(update_fields=['checked_in'])
+
+    if assignment.checked_in:
+        messages.success(request, 'Official marked as checked in.')
+    else:
+        messages.success(request, 'Official check-in removed.')
     return redirect('session-home', session_id=session.id)
 
 

@@ -38,6 +38,7 @@ urlpatterns = [
     path('session/<int:session_id>/delete_csv/', views.delete_session_csv, name='delete-session-csv'),
     path('check_in/<int:assignment_id>/', views.check_in, name='check-in'),
     path('session/<int:session_id>/self_check_in/', views.self_check_in, name='self-check-in'),
+    path('session/assignment/<int:assignment_id>/set_check_in/', views.set_assignment_check_in, name='set-assignment-check-in'),
     path('session/<int:session_id>/send_join_all/', views.send_join_all, name='send-join-all'),
     path('session/<int:session_id>/deck/', views.deck_assignments, name='deck-assignments'),
 

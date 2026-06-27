@@ -2,6 +2,7 @@ from collections import defaultdict
 import json
 from datetime import datetime
 from django.db import transaction
+from django.db.models import Sum
 from ..models import Session, SessionAssignment, DeckAssignment, User, RosterEntry, RosterCertification
 
 # role constants and required counts
@@ -182,7 +183,7 @@ def finalize_and_save_assignments(session, assignments):
     # recompute totals for involved users
     user_ids = DeckAssignment.objects.filter(session=session).values_list('official_id', flat=True).distinct()
     for uid in user_ids:
-        total = SessionAssignment.objects.filter(official_id=uid).aggregate(models_sum=models.Sum('hours_worked'))['models_sum'] or 0
+        total = SessionAssignment.objects.filter(official_id=uid).aggregate(hours_sum=Sum('hours_worked'))['hours_sum'] or 0
         u = User.objects.get(pk=uid)
         u.total_volunteer_hours = total
         u.save()
