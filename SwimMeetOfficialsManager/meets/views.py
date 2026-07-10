@@ -403,6 +403,9 @@ def join_sessions_from_meet(request, meet_id):
     return redirect('official-dashboard')
 
 
+def _wants_json_response(request):
+    return request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.content_type == 'application/json'
+
 def _generate_code(n=6):
     return ''.join(random.choices(string.digits, k=n))
 
