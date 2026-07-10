@@ -4,12 +4,9 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='index'),
-    path("login/", views.login_view, name="login"),
-    path("login", views.login_view),
-    path("logout/", views.logout_view, name="logout"),
-    path("logout", views.logout_view),
-    path("register/", views.register, name="register"),
-    path("register", views.register),
+    path("login", views.login_view, name="login"),
+    path("logout", views.logout_view, name="logout"),
+    path("register", views.register, name="register"),
     
     # Officials (separate login flow)
     # official login/register removed; use main referee login/register
@@ -38,8 +35,18 @@ urlpatterns = [
     path('session/<int:session_id>/delete_csv/', views.delete_session_csv, name='delete-session-csv'),
     path('check_in/<int:assignment_id>/', views.check_in, name='check-in'),
     path('session/<int:session_id>/self_check_in/', views.self_check_in, name='self-check-in'),
-    path('session/assignment/<int:assignment_id>/set_check_in/', views.set_assignment_check_in, name='set-assignment-check-in'),
+    path('session/<int:session_id>/referee_check_in/<int:assignment_id>/', views.referee_check_in, name='referee-check-in'),
+    path('session/<int:session_id>/referee_checkout/<int:assignment_id>/', views.referee_checkout_session, name='referee-checkout-session'),
     path('session/<int:session_id>/send_join_all/', views.send_join_all, name='send-join-all'),
     path('session/<int:session_id>/deck/', views.deck_assignments, name='deck-assignments'),
+    path('session/<int:session_id>/start/', views.start_session, name='start-session'),
+    path('session/<int:session_id>/simulation/', views.session_simulation, name='session-simulation'),
+    path('session/<int:session_id>/simulation/data/', views.session_simulation_data, name='session-simulation-data'),
+    path('session/<int:session_id>/end/', views.end_session, name='end-session'),
+    path('session/<int:session_id>/results/', views.session_results, name='session-results'),
+    path('session/<int:session_id>/toggle_break/<int:official_id>/', views.toggle_break, name='toggle-break'),
+    path('session/<int:session_id>/add_official/', views.add_official, name='add-official'),
+    path('session/<int:session_id>/search_officials/', views.search_officials, name='search-officials'),
+    path('session/<int:session_id>/checkout/<int:official_id>/', views.checkout_official, name='checkout-official'),
 
 ]

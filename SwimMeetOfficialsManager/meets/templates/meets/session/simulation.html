@@ -1,0 +1,403 @@
+{% extends "meets/layout.html" %}
+
+{% block title %}Session Simulation — {{ session }}{% endblock %}
+
+{% block body %}
+<div class="fade-in-up">
+
+  <!-- Header card -->
+  <div class="header-card">
+    <div class="d-flex justify-content-between align-items-start">
+      <div>
+        <h1 class="page-title mb-1">Session {{ session.session_number }} Simulation</h1>
+        <div class="breadcrumb-text">
+          {{ session.meet.name }}
+          <span class="status-badge ms-2 {% if session.status == 'in_progress' %}status-checked{% elif session.status == 'ended' %}status-not{% else %}status-not{% endif %}" style="font-size:.8rem">
+            {{ session.get_status_display }}
+          </span>
+        </div>
+      </div>
+      <div class="d-flex gap-2">
+        {% if is_running and request.user == session.meet.created_by %}
+          <form method="post" action="{% url 'end-session' session.id %}" style="display:inline" onsubmit="return confirm('End this session?')">
+            {% csrf_token %}
+            <button class="btn btn-danger">End Session</button>
+          </form>
+        {% endif %}
+        {% if session.status == 'ended' and request.user == session.meet.created_by %}
+          <a href="{% url 'session-results' session.id %}" class="btn btn-primary">Edit Results</a>
+        {% endif %}
+        {% if is_running and request.user == session.meet.created_by %}
+          <a href="{% url 'deck-assignments' session.id %}" class="btn btn-outline-primary">Manage Deck</a>
+        {% endif %}
+        <a href="{% url 'session-home' session.id %}" class="btn btn-outline-secondary">Back</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Metrics row -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="stat-card stat-card-cyan">
+        <div class="stat-icon">⏱</div>
+        <div class="stat-body">
+          <div class="stat-label">Elapsed</div>
+          <div class="stat-value" id="elapsed-time">{{ elapsed_minutes }} min</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="stat-card stat-card-blue">
+        <div class="stat-icon">👥</div>
+        <div class="stat-body">
+          <div class="stat-label">Officials on Deck</div>
+          <div class="stat-value" id="deck-count">{{ officials_data|length }}</div>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="stat-card stat-card-green">
+        <div class="stat-icon">📡</div>
+        <div class="stat-body">
+          <div class="stat-label">Status</div>
+          <div class="stat-value">{% if is_running %}Live{% else %}{{ session.get_status_display }}{% endif %}</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Officials on Deck -->
+  {% if num_pools == 1 %}
+  <div class="card p-4 mb-4">
+    <h5 class="section-title">Officials on Deck</h5>
+    <div class="table-responsive">
+      <table class="table" id="officials-table">
+        <thead>
+          <tr>
+            <th>Official</th>
+            <th>Role</th>
+            <th>Status</th>
+            <th>Hours</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="pool-body-1">
+          {% for od in officials_data %}
+          <tr id="official-{{ od.official.id }}" class="{% if od.on_break %}table-warning{% endif %}">
+            <td class="fw-600">{{ od.official.get_full_name|default:od.official.username }}</td>
+            <td>{{ od.role|default:"—" }}</td>
+            <td>
+              {% if od.on_break %}
+                <span class="status-badge status-not">On Break</span>
+              {% else %}
+                <span class="status-badge status-checked">Active</span>
+              {% endif %}
+            </td>
+            <td><span class="hours-val">{{ od.hours_so_far }}</span> h</td>
+            <td class="text-end">
+              <button class="btn btn-sm btn-outline-secondary toggle-break" data-official-id="{{ od.official.id }}">
+                {% if od.on_break %}Back to Work{% else %}Put on Break{% endif %}
+              </button>
+              <button class="btn btn-sm btn-outline-danger checkout" data-official-id="{{ od.official.id }}">Check Out</button>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="5">
+              <div class="empty-state">
+                <div class="empty-icon">📋</div>
+                <h5>No deck assignments</h5>
+                <p><a href="{% url 'deck-assignments' session.id %}">Assign officials</a> first.</p>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  {% else %}
+  {% for pool_num in pool_range %}
+  <div class="card mb-4" style="border-top:3px solid var(--primary)">
+    <div class="card-header d-flex align-items-center" style="background:var(--primary);color:#fff;border-radius:var(--card-radius) var(--card-radius) 0 0">
+      <strong>Pool {{ pool_num }}</strong>
+    </div>
+    <div class="p-3">
+      <div class="table-responsive">
+        <table class="table mb-0" id="pool-officials-{{ pool_num }}">
+          <thead>
+            <tr>
+              <th>Official</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>Hours</th>
+              <th class="text-end">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="pool-body-{{ pool_num }}">
+            {% for od in officials_data %}{% if od.pool_number == pool_num %}
+            <tr id="official-{{ od.official.id }}" class="{% if od.on_break %}table-warning{% endif %}">
+              <td class="fw-600">{{ od.official.get_full_name|default:od.official.username }}</td>
+              <td>{{ od.role|default:"—" }}</td>
+              <td>
+                {% if od.on_break %}
+                  <span class="status-badge status-not">On Break</span>
+                {% else %}
+                  <span class="status-badge status-checked">Active</span>
+                {% endif %}
+              </td>
+              <td><span class="hours-val">{{ od.hours_so_far }}</span> h</td>
+              <td class="text-end">
+                <button class="btn btn-sm btn-outline-secondary toggle-break" data-official-id="{{ od.official.id }}">
+                  {% if od.on_break %}Back to Work{% else %}Put on Break{% endif %}
+                </button>
+                <button class="btn btn-sm btn-outline-danger checkout" data-official-id="{{ od.official.id }}">Check Out</button>
+              </td>
+            </tr>
+            {% endif %}{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <!-- Add Official -->
+  {% if request.user == session.meet.created_by and is_running %}
+  <div class="card p-4 mb-4">
+    <h5 class="section-title">Add &amp; Check In Official</h5>
+    <form id="add-official-form" class="row g-3">
+      {% csrf_token %}
+      <div class="col-md-{% if num_pools > 1 %}3{% else %}4{% endif %}">
+        <input type="text" class="form-control" id="search-name" placeholder="Search by name..." autocomplete="off">
+        <div id="search-results" class="list-group mt-2" style="display:none;"></div>
+      </div>
+      <div class="col-md-{% if num_pools > 1 %}3{% else %}4{% endif %}">
+        <select class="form-select" id="role-select" required disabled>
+          <option value="">Select person first</option>
+        </select>
+        <div id="qualified-roles" class="small text-muted mt-2"></div>
+      </div>
+      {% if num_pools > 1 %}
+      <div class="col-md-2">
+        <select class="form-select" id="pool-select">
+          {% for pool_num in pool_range %}
+          <option value="{{ pool_num }}">Pool {{ pool_num }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+      <div class="col-md-{% if num_pools > 1 %}4{% else %}4{% endif %}">
+        <button type="submit" class="btn btn-primary" id="add-official-btn" disabled>Check In</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+</div>
+
+{% if is_running %}
+<script>
+(function(){
+  var dataUrl = "{% url 'session-simulation-data' session.id %}";
+  var toggleBreakUrl = "{% url 'toggle-break' session.id 0 %}";
+  var checkoutUrl = "{% url 'checkout-official' session.id 0 %}";
+  var addOfficialUrl = "{% url 'add-official' session.id %}";
+  var searchUrl = "{% url 'search-officials' session.id %}";
+  var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+  
+  function formatMinutes(m) {
+    var h = Math.floor(m / 60);
+    var mins = m % 60;
+    if (h > 0) return h + 'h ' + mins + 'm';
+    return m + ' min';
+  }
+  
+  function update() {
+    fetch(dataUrl, {credentials: 'same-origin'})
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        // Update timer
+        document.getElementById('elapsed-time').textContent = formatMinutes(data.elapsed_minutes);
+        
+        // Update officials
+        data.officials.forEach(function(o){
+          var row = document.getElementById('official-' + o.id);
+          if (!row) return;
+          var cells = row.querySelectorAll('td');
+          cells[1].textContent = o.role || '—';
+          if (o.on_break) {
+            row.className = 'table-warning';
+            cells[2].innerHTML = '<span class="status-badge status-not">On Break</span>';
+            cells[4].querySelector('.toggle-break').textContent = 'Back to Work';
+          } else {
+            row.className = '';
+            cells[2].innerHTML = '<span class="status-badge status-checked">Active</span>';
+            cells[4].querySelector('.toggle-break').textContent = 'Put on Break';
+          }
+          cells[3].querySelector('.hours-val').textContent = o.hours_so_far;
+        });
+
+        // If session ended, stop polling
+        if (data.status === 'ended') {
+          clearInterval(pollInterval);
+        }
+      })
+      .catch(function(err){ console.error('Simulation poll error:', err); });
+  }
+
+  // Toggle break
+  document.addEventListener('click', function(e){
+    if (e.target.classList.contains('toggle-break')) {
+      e.preventDefault();
+      var oid = e.target.getAttribute('data-official-id');
+      fetch(toggleBreakUrl.replace('/0/', '/' + oid + '/'), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'X-CSRFToken': csrfToken}
+      }).then(update);
+    }
+  });
+
+  // Checkout
+  document.addEventListener('click', function(e){
+    if (e.target.classList.contains('checkout')) {
+      e.preventDefault();
+      if (!confirm('Check out this official?')) return;
+      var oid = e.target.getAttribute('data-official-id');
+      fetch(checkoutUrl.replace('/0/', '/' + oid + '/'), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'X-CSRFToken': csrfToken}
+      }).then(function(){
+        document.getElementById('official-' + oid).remove();
+      });
+    }
+  });
+
+  // Search officials
+  var selectedOfficial = null;
+  var searchNameInput = document.getElementById('search-name');
+  if (searchNameInput) {
+    searchNameInput.addEventListener('input', function(e){
+      var query = e.target.value.trim();
+      if (query.length < 2) {
+        document.getElementById('search-results').style.display = 'none';
+        return;
+      }
+      fetch(searchUrl + '?q=' + encodeURIComponent(query), {
+        credentials: 'same-origin'
+      }).then(function(r){ return r.json(); }).then(function(data){
+        var resultsDiv = document.getElementById('search-results');
+        resultsDiv.innerHTML = '';
+        if (data.results.length === 0) {
+          resultsDiv.innerHTML = '<div class="list-group-item text-muted">No results</div>';
+          resultsDiv.style.display = 'block';
+          return;
+        }
+        data.results.forEach(function(o){
+          var item = document.createElement('a');
+          item.className = 'list-group-item list-group-item-action';
+          item.href = '#';
+          item.innerHTML = o.name + (o.qualified_roles.length > 0 ? ' <span class="badge bg-success ms-2">' + o.qualified_roles.join(', ') + '</span>' : '<span class="badge bg-danger ms-2">No roles</span>');
+          item.addEventListener('click', function(e){
+            e.preventDefault();
+            selectedOfficial = o;
+            document.getElementById('search-name').value = o.name;
+            document.getElementById('search-results').style.display = 'none';
+            
+            // Update role select
+            var roleSelect = document.getElementById('role-select');
+            roleSelect.innerHTML = '<option value="">Select Role</option>';
+            o.qualified_roles.forEach(function(role){
+              var opt = document.createElement('option');
+              opt.value = role;
+              opt.textContent = role;
+              roleSelect.appendChild(opt);
+            });
+            
+            if (o.qualified_roles.length === 0) {
+              roleSelect.disabled = true;
+              document.getElementById('add-official-btn').disabled = true;
+              document.getElementById('qualified-roles').innerHTML = '<span class="text-danger">Not qualified for any roles</span>';
+            } else {
+              roleSelect.disabled = false;
+              document.getElementById('add-official-btn').disabled = false;
+              document.getElementById('qualified-roles').innerHTML = 'Qualified for: ' + o.qualified_roles.join(', ');
+            }
+          });
+          resultsDiv.appendChild(item);
+        });
+        resultsDiv.style.display = 'block';
+      });
+    });
+  }
+
+  // Add official
+  var addForm = document.getElementById('add-official-form');
+  if (addForm) {
+    addForm.addEventListener('submit', function(e){
+      e.preventDefault();
+      if (!selectedOfficial) {
+        alert('Please select an official');
+        return;
+      }
+      var role = document.getElementById('role-select').value;
+      if (!role) {
+        alert('Please select a role');
+        return;
+      }
+      var formData = new FormData();
+      formData.append('member_id', selectedOfficial.member_id);
+      formData.append('role', role);
+      var poolSelectEl = document.getElementById('pool-select');
+      var poolNum = poolSelectEl ? poolSelectEl.value : '1';
+      formData.append('pool_number', poolNum);
+      fetch(addOfficialUrl, {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin',
+        headers: {'X-CSRFToken': csrfToken}
+      }).then(function(r){ return r.json(); }).then(function(data){
+        if (data.success) {
+          // Append to the correct pool tbody (or fallback to first available)
+          var tbody = document.getElementById('pool-body-' + poolNum)
+                   || document.querySelector('#officials-table tbody')
+                   || document.querySelector('[id^="pool-body-"]');
+          var row = document.createElement('tr');
+          row.id = 'official-' + data.official.id;
+          row.innerHTML = `
+            <td>${data.official.name}</td>
+            <td>${data.official.role}</td>
+            <td><span class="badge bg-success">Active</span></td>
+            <td><span class="hours-val">0</span> h</td>
+            <td>
+              <button class="btn btn-sm btn-outline-secondary toggle-break" data-official-id="${data.official.id}">Put on Break</button>
+              <button class="btn btn-sm btn-outline-danger checkout" data-official-id="${data.official.id}">Check Out</button>
+            </td>
+          `;
+          if (tbody) tbody.appendChild(row);
+          document.getElementById('search-name').value = '';
+          document.getElementById('role-select').innerHTML = '<option value="">Select person first</option>';
+          document.getElementById('role-select').disabled = true;
+          document.getElementById('add-official-btn').disabled = true;
+          document.getElementById('qualified-roles').innerHTML = '';
+          selectedOfficial = null;
+        } else {
+          alert(data.error || 'Error adding official');
+        }
+      }).catch(function(err){
+        console.error('Error:', err);
+        alert('Error adding official');
+      });
+    });
+  }
+
+  var pollInterval = setInterval(update, 10000); // Poll every 10 seconds
+})();
+</script>
+{% endif %}
+
+{% endblock %}

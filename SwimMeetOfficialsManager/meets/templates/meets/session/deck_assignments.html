@@ -1,60 +1,90 @@
-{% extends "meets/layout.html" %}
+﻿{% extends "meets/layout.html" %}
 
 {% block body %}
-<div class="container mt-4">
-  <div class="card p-4">
-    <div class="d-flex justify-content-between align-items-center">
-      <h3>Deck Assignments — {{ session }}</h3>
+<div class="fade-in-up">
+  <!-- Header card -->
+  <div class="header-card">
+    <div class="d-flex justify-content-between align-items-start">
       <div>
+        <h1 class="page-title mb-1">Deck Assignments</h1>
+        <div class="breadcrumb-text">{{ session.meet.name }} — Session {{ session.session_number }}</div>
+      </div>
+      <div class="d-flex gap-2">
         <form method="post" style="display:inline">{% csrf_token %}
           <input type="hidden" name="action" value="generate">
-          <button class="btn btn-sm btn-primary">Generate Deck</button>
+          <button class="btn btn-primary">Generate Deck</button>
         </form>
-        <a class="btn btn-sm btn-outline-secondary" href="{% url 'session-home' session.id %}">Back</a>
+        {% if session.status == 'in_progress' %}
+          <a class="btn btn-info" href="{% url 'session-simulation' session.id %}">View Simulation</a>
+        {% endif %}
+        <a class="btn btn-outline-secondary" href="{% url 'session-home' session.id %}">Back</a>
       </div>
     </div>
+  </div>
 
-    <hr>
+  {% if session.status == 'in_progress' %}
+  <div class="alert alert-info" style="border-radius:var(--card-radius)">
+    <strong>Session is live!</strong> Changes saved here will immediately update the running simulation.
+  </div>
+  {% endif %}
 
-    <form method="post" id="save-form">{% csrf_token %}
-      <input type="hidden" name="action" value="save">
-      <input type="hidden" name="assignments" id="assignments-input">
+  {% if extra_roles or num_pools > 1 %}
+  <div class="alert alert-info" style="border-radius:var(--card-radius)">
+    <strong>Additional Roles:</strong>
+    <ul class="mb-0 mt-1">
+      {% if 'Runner' in extra_roles %}
+      <li><strong>Runner</strong> — Required for LCM. Stroke &amp; Turn officials qualify. One per pool.</li>
+      {% endif %}
+      {% if 'Relay Start Checker' in extra_roles %}
+      <li><strong>Relay Start Checker</strong> — Required for relay starts. Stroke &amp; Turn officials qualify. One per pool.</li>
+      {% endif %}
+      {% if num_pools > 1 %}
+      <li>This meet has <strong>{{ num_pools }} pools</strong>. Drag officials between pools to reassign.</li>
+      {% endif %}
+    </ul>
+  </div>
+  {% endif %}
 
+  <form method="post" id="save-form">{% csrf_token %}
+    <input type="hidden" name="action" value="save">
+    <input type="hidden" name="assignments" id="assignments-input">
+
+    {% if num_pools == 1 %}
+    <div class="card p-4 mb-4">
+      <h5 class="section-title">Assignments</h5>
       <div class="table-responsive">
-        <table class="table">
+        <table class="table" id="pool-table-1">
           <thead>
             <tr>
               <th>Official</th>
               <th>Suggested Role</th>
               <th>Assigned Role</th>
-              <th>Break Pattern</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody class="pool-body" id="pool-body-1" data-pool="1">
             {% for sa in checked %}
-            <tr data-official-id="{{ sa.official.id }}">
-              <td>{{ sa.official.get_full_name|default:sa.official.username }}</td>
-              
-              
-              
+            <tr data-official-id="{{ sa.official.id }}" data-pool-number="1">
+              <td class="fw-600">{{ sa.official.get_full_name|default:sa.official.username }}</td>
+              <td><em class="text-muted">{{ sa.suggested_role }}</em></td>
               <td>
-                <em class="suggested-role" data-official-id="{{ sa.official.id }}">{{ sa.suggested_role }}</em>
-              </td>
-              <td>
-                <select class="form-select assigned-role" data-official-id="{{ sa.official.id }}">
+                <select class="form-select form-select-sm assigned-role" data-official-id="{{ sa.official.id }}">
                   <option value="">(none)</option>
                   {% for role in sa.allowed_roles %}
                     <option value="{{ role }}" {% if sa.assigned_role == role %}selected{% endif %}>{{ role }}</option>
                   {% endfor %}
                 </select>
                 {% if sa.allowed_roles|length == 0 %}
-                  <div class="small text-muted mt-1">No certified roles</div>
+                  <div class="small text-muted">No certified roles</div>
                 {% endif %}
               </td>
-              <td>
-                <div class="input-group">
-                  <input type="number" min="0" step="1" class="form-control break-length" data-official-id="{{ sa.official.id }}" value="{{ sa.break_length_minutes }}">
-                  <span class="input-group-text">min</span>
+            </tr>
+            {% empty %}
+            <tr>
+              <td colspan="3">
+                <div class="empty-state">
+                  <div class="empty-icon">👥</div>
+                  <h5>No officials checked in</h5>
+                  <p>Officials must check in before they can be assigned.</p>
                 </div>
               </td>
             </tr>
@@ -62,38 +92,122 @@
           </tbody>
         </table>
       </div>
+    </div>
 
-      <div class="mt-3 d-flex justify-content-end">
-        <button type="button" id="save-btn" class="btn btn-success">Save Changes</button>
+    {% else %}
+    <div class="row g-3 mb-4">
+      {% for pool_num in pool_range %}
+      <div class="col-md-{% if num_pools == 2 %}6{% elif num_pools == 3 %}4{% else %}6{% endif %}">
+        <div class="card h-100" style="border-top:3px solid var(--primary)">
+          <div class="card-header d-flex align-items-center" style="background:var(--primary);color:#fff;border-radius:var(--card-radius) var(--card-radius) 0 0">
+            <strong>Pool {{ pool_num }}</strong>
+            <small class="ms-auto opacity-75">Drag officials here</small>
+          </div>
+          <div class="p-0 pool-drop-zone" data-pool="{{ pool_num }}">
+            <table class="table table-sm mb-0" id="pool-table-{{ pool_num }}">
+              <thead>
+                <tr>
+                  <th style="width:38%">Official</th>
+                  <th style="width:22%">Suggested</th>
+                  <th style="width:40%">Assigned Role</th>
+                </tr>
+              </thead>
+              <tbody class="pool-body" id="pool-body-{{ pool_num }}" data-pool="{{ pool_num }}">
+                {% for sa in checked %}{% if sa.pool_number == pool_num %}
+                <tr draggable="true" class="drag-row" data-official-id="{{ sa.official.id }}" data-pool-number="{{ pool_num }}">
+                  <td>
+                    <span class="drag-handle text-muted me-1">&#8286;</span>
+                    <span class="fw-600">{{ sa.official.get_full_name|default:sa.official.username }}</span>
+                  </td>
+                  <td><em class="text-muted small">{{ sa.suggested_role }}</em></td>
+                  <td>
+                    <select class="form-select form-select-sm assigned-role" data-official-id="{{ sa.official.id }}">
+                      <option value="">(none)</option>
+                      {% for role in sa.allowed_roles %}
+                        <option value="{{ role }}" {% if sa.assigned_role == role %}selected{% endif %}>{{ role }}</option>
+                      {% endfor %}
+                    </select>
+                  </td>
+                </tr>
+                {% endif %}{% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
-    </form>
-  </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="d-flex justify-content-end">
+      <button type="button" id="save-btn" class="btn btn-success px-4">Save Changes</button>
+    </div>
+  </form>
 </div>
+
+<style>
+.pool-drop-zone { min-height: 80px; position: relative; }
+.pool-drop-zone.drop-target { background-color: #e7f1ff; outline: 2px dashed #0d6efd; }
+.drag-row { cursor: grab; }
+.drag-row.dragging { opacity: 0.4; }
+.drag-handle { cursor: grab; font-size: 1em; user-select: none; }
+</style>
 
 <script>
 (function(){
+  var numPools = {{ num_pools }};
+
+  if (numPools > 1) {
+    var dragSrcRow = null;
+
+    document.querySelectorAll('tr.drag-row').forEach(function(row){
+      row.addEventListener('dragstart', function(e){
+        dragSrcRow = row;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', row.getAttribute('data-official-id'));
+        setTimeout(function(){ row.classList.add('dragging'); }, 0);
+      });
+      row.addEventListener('dragend', function(){
+        row.classList.remove('dragging');
+        document.querySelectorAll('.pool-drop-zone').forEach(function(z){ z.classList.remove('drop-target'); });
+        dragSrcRow = null;
+      });
+    });
+
+    document.querySelectorAll('.pool-drop-zone').forEach(function(zone){
+      zone.addEventListener('dragover', function(e){
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        zone.classList.add('drop-target');
+      });
+      zone.addEventListener('dragleave', function(e){
+        if (!zone.contains(e.relatedTarget)){ zone.classList.remove('drop-target'); }
+      });
+      zone.addEventListener('drop', function(e){
+        e.preventDefault();
+        zone.classList.remove('drop-target');
+        if (!dragSrcRow) return;
+        var targetPool = zone.getAttribute('data-pool');
+        var tbody = zone.querySelector('.pool-body');
+        dragSrcRow.setAttribute('data-pool-number', targetPool);
+        tbody.appendChild(dragSrcRow);
+      });
+    });
+  }
+
   function collectAssignments(){
-    const rows = document.querySelectorAll('tr[data-official-id]');
-    const out = {};
-    rows.forEach(function(r){
-      const id = r.getAttribute('data-official-id');
-      const role = r.querySelector('.assigned-role').value;
-      const breakVal = r.querySelector('.break-length').value || '';
-      let breaks = [];
-      if(breakVal !== ''){
-        const num = parseInt(breakVal, 10);
-        if(!isNaN(num)){
-          breaks = [num];
-        }
-      }
-      out[id] = {role: role, break_schedule: breaks};
+    var out = {};
+    document.querySelectorAll('tr[data-official-id]').forEach(function(r){
+      var id = r.getAttribute('data-official-id');
+      var poolNum = parseInt(r.getAttribute('data-pool-number') || '1', 10);
+      var sel = r.querySelector('.assigned-role');
+      out[id] = {role: sel ? sel.value : '', pool_number: poolNum, break_schedule: []};
     });
     return out;
   }
 
   document.getElementById('save-btn').addEventListener('click', function(){
-    const data = collectAssignments();
-    document.getElementById('assignments-input').value = JSON.stringify(data);
+    document.getElementById('assignments-input').value = JSON.stringify(collectAssignments());
     document.getElementById('save-form').submit();
   });
 })();

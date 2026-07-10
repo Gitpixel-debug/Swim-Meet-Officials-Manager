@@ -48,6 +48,12 @@ class Certification(models.Model):
 # =====================================================
 
 class Meet(models.Model):
+    COURSE_CHOICES = [
+        ('SCY', 'SCY — Short Course Yards'),
+        ('SCM', 'SCM — Short Course Meters'),
+        ('LCM', 'LCM — Long Course Meters'),
+    ]
+
     name = models.CharField(max_length=200)
     location = models.CharField(max_length=255)
 
@@ -65,6 +71,9 @@ class Meet(models.Model):
     join_code = models.CharField(max_length=10, unique=True, editable=False)
 
     num_sessions = models.PositiveIntegerField(default=1)
+    course_type = models.CharField(max_length=10, choices=COURSE_CHOICES, default='SCY')
+    num_pools = models.PositiveIntegerField(default=1)
+    has_relay_events = models.BooleanField(default=False, help_text='Does this meet include relay events?')
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -95,6 +104,17 @@ class Session(models.Model):
     end_time = models.TimeField()
     
     join_code = models.CharField(max_length=10, editable=False, default='')
+
+    STATUS_CHOICES = [
+        ('not_started', 'Not Started'),
+        ('in_progress', 'In Progress'),
+        ('ended', 'Ended'),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='not_started')
+    started_at = models.DateTimeField(null=True, blank=True)
+    ended_at = models.DateTimeField(null=True, blank=True)
+    has_relay_starts = models.BooleanField(default=False, help_text='Does this session include relay starts?')
+    offline_mode = models.BooleanField(default=False, help_text='Enable for venues with limited internet access')
 
     class Meta:
         unique_together = ("meet", "session_number")
@@ -204,10 +224,29 @@ class DeckAssignment(models.Model):
     role = models.CharField(max_length=100)
     # JSON-like break schedule stored as text: list of break slot strings or indices
     break_schedule = models.TextField(blank=True, default='[]')
+    on_break = models.BooleanField(default=False)
+    break_started_at = models.DateTimeField(null=True, blank=True)
+    break_time_total = models.FloatField(default=0)  # accumulated break seconds
+    pool_number = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         unique_together = ('session', 'official')
 
     def __str__(self):
-        return f"{self.session} - {self.official} as {self.role}"
+        return f"{self.session} - {self.official} as {self.role} (Pool {self.pool_number})"
+
+
+class VolunteerLog(models.Model):
+    """Final record of what each official actually did during a session."""
+    session = models.ForeignKey(Session, on_delete=models.CASCADE, related_name='volunteer_logs')
+    official = models.ForeignKey(User, on_delete=models.CASCADE, related_name='volunteer_logs')
+    role = models.CharField(max_length=100, blank=True)
+    hours_worked = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ('session', 'official')
+
+    def __str__(self):
+        return f"{self.official} - {self.session} ({self.role}, {self.hours_worked}h)"
