@@ -42,7 +42,7 @@
 
     
     <!-- Add Official -->
-    {% if request.user == session.meet.created_by %}
+    {% if request.user == session.meet.created_by and session.status != 'ended' %}
     <hr>
     <div class="card p-4 shadow-sm mb-4">
       <h5 class="section-title">Add &amp; Check In Official</h5>
@@ -198,11 +198,13 @@
                 </td>
                 <td>{{ assignment.hours_worked }}</td>
                 <td>
-                    {% if request.user == session.meet.created_by %}
+                  {% if request.user == session.meet.created_by and session.status != 'ended' %}
                     <form method="post" action="{% url 'referee-checkout-session' session.id assignment.id %}" style="display:inline">
                         {% csrf_token %}
                         <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                     </form>
+                  {% elif request.user == session.meet.created_by %}
+                  <button class="btn btn-sm btn-outline-secondary" type="button" disabled>Remove</button>
                     {% endif %}
                 </td>
                 <td>
@@ -246,11 +248,13 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if request.user == session.meet.created_by %}
+                  {% if request.user == session.meet.created_by and session.status != 'ended' %}
                     <form method="post" action="{% url 'referee-check-in' session.id assignment.id %}" style="display:inline">
                         {% csrf_token %}
                         <button class="btn btn-sm btn-success" type="submit">Check In</button>
                     </form>
+                  {% elif request.user == session.meet.created_by %}
+                  <button class="btn btn-sm btn-outline-secondary" type="button" disabled>Check In</button>
                     {% endif %}
                 </td>
             </tr>
@@ -288,7 +292,7 @@
                 </td>
                 <td>{{ a.hours_worked }}</td>
                 <td>
-                    {% if request.user == session.meet.created_by %}
+                  {% if request.user == session.meet.created_by and session.status != 'ended' %}
                     {% if a.checked_in %}
                     <form method="post" action="{% url 'referee-checkout-session' session.id a.id %}" style="display:inline">
                         {% csrf_token %}
@@ -300,6 +304,8 @@
                         <button class="btn btn-sm btn-success" type="submit">Check In</button>
                     </form>
                     {% endif %}
+                    {% elif request.user == session.meet.created_by %}
+                    <button class="btn btn-sm btn-outline-secondary" type="button" disabled>Locked (Ended)</button>
                     {% endif %}
                 </td>
                 <td>

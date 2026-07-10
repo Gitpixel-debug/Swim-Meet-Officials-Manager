@@ -187,6 +187,9 @@ def referee_check_in(request, session_id, assignment_id):
     session = get_object_or_404(Session, pk=session_id)
     if request.user != session.meet.created_by:
         return HttpResponseForbidden('Not allowed')
+    if session.status == 'ended':
+        messages.warning(request, 'This session has already ended. Check-in is disabled.')
+        return redirect('session-home', session_id=session.id)
     sa = get_object_or_404(SessionAssignment, pk=assignment_id, session=session)
     sa.checked_in = True
     sa.save()
@@ -201,6 +204,9 @@ def referee_checkout_session(request, session_id, assignment_id):
     session = get_object_or_404(Session, pk=session_id)
     if request.user != session.meet.created_by:
         return HttpResponseForbidden('Not allowed')
+    if session.status == 'ended':
+        messages.warning(request, 'This session has already ended. Removal is disabled.')
+        return redirect('session-home', session_id=session.id)
     sa = get_object_or_404(SessionAssignment, pk=assignment_id, session=session)
     official_name = sa.official.get_full_name() or sa.official.username
 
@@ -1477,10 +1483,12 @@ def search_officials(request, session_id):
 @login_required
 @require_POST
 def add_official(request, session_id):
-    """Add and check in a new official during the session."""
+    """Add and check in a new official before or during a session."""
     session = get_object_or_404(Session, pk=session_id)
     if request.user != session.meet.created_by:
         return JsonResponse({'error': 'Not allowed'}, status=403)
+    if session.status == 'ended':
+        return JsonResponse({'error': 'Session has ended. Add/check-in is disabled.'}, status=400)
 
     member_id = request.POST.get('member_id', '').strip()
     role = request.POST.get('role', '').strip()
@@ -1545,7 +1553,6 @@ def session_results(request, session_id):
         for vlog in logs:
             role_key = f'role_{vlog.id}'
             hours_key = f'hours_{vlog.id}'
-            notes_key = f'notes_{vlog.id}'
 
             if role_key in request.POST:
                 vlog.role = request.POST[role_key]
@@ -1554,8 +1561,6 @@ def session_results(request, session_id):
                     vlog.hours_worked = round(float(request.POST[hours_key]), 2)
                 except (ValueError, TypeError):
                     pass
-            if notes_key in request.POST:
-                vlog.notes = request.POST[notes_key]
             vlog.save()
 
             # Sync hours back to SessionAssignment
