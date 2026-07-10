@@ -1,3 +1,4 @@
+from django.core import signing
 import json
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import authenticate, login, logout
@@ -406,6 +407,29 @@ def _generate_code(n=6):
     return ''.join(random.choices(string.digits, k=n))
 
 
+def _validate_registration_identity(member_id, email):
+    member_id = (member_id or '').strip()
+    email = (email or '').strip()
+    if not member_id or not email:
+        return None, 'Enter your member ID and email.'
+
+    try:
+        roster = RosterEntry.objects.get(member_id__iexact=member_id)
+    except RosterEntry.DoesNotExist:
+        return None, 'Invalid member ID.'
+
+    roster_email = (roster.email or '').strip()
+    if roster_email and roster_email.lower() != email.lower():
+        return None, 'Provided email does not match roster record.'
+
+    if User.objects.filter(username=member_id).exists():
+        return None, 'Member ID already registered.'
+
+    return roster, None
+
+
+
+
 def request_login_code(request):
     """Send a one-time code to the provided email for login/registration."""
     if request.method != 'POST':
@@ -413,24 +437,14 @@ def request_login_code(request):
     email = request.POST.get('email') or request.POST.get('email_address')
     if not email:
         return JsonResponse({'status': 'missing_email'}, status=400)
-
-    # Ensure roster is loaded before checking
+    
     try:
         load_roster_if_empty()
     except Exception:
         pass
 
-    # Validate email exists in the official roster (authoritative source)
-    roster_exists = RosterEntry.objects.filter(email__iexact=email).exists()
-    if not roster_exists:
-        return JsonResponse({'status': 'email_not_found'}, status=400)
-
     code = _generate_code()
-    # store code and expiry in session
-    key = f'login_code_{email}'
-    exp_key = f'login_code_exp_{email}'
-    request.session[key] = code
-    request.session[exp_key] = (timezone.now() + timedelta(minutes=10)).isoformat()
+    token = signing.dumps({'email': email, 'code': code}, salt='login-code')
     try:
         send_mail(
             'Your login code',
@@ -440,52 +454,65 @@ def request_login_code(request):
             fail_silently=False,
         )
     except Exception:
-        return JsonResponse({'status': 'email_failed'}, status=500)
-    return JsonResponse({'status': 'sent'})
-
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'email_failed', 'message': 'Unable to send the login code. Check email settings and try again.'}, status=500)
+        return redirect(f"{reverse('login')}?message=Unable+to+send+the+login+code.+Check+email+settings+and+try+again.&email={email}")
+    if _wants_json_response(request):
+        return JsonResponse({'status': 'sent', 'token': token})
+    return redirect(f"{reverse('login')}?message=Code+sent+to+{email}&email={email}&verify=1&token={token}")
 
 def verify_login_code(request):
     if request.method != 'POST':
         return JsonResponse({'status': 'bad_method'}, status=405)
     email = request.POST.get('email')
     code = request.POST.get('code')
-    if not email or not code:
+    token = request.POST.get('token')
+    if not email or not code or not token:
         return JsonResponse({'status': 'missing'}, status=400)
-    key = f'login_code_{email}'
-    exp_key = f'login_code_exp_{email}'
-    stored = request.session.get(key)
-    exp = request.session.get(exp_key)
-    if not stored or stored != code:
-        return JsonResponse({'status': 'invalid_code'}, status=400)
-    if exp and dateparse.parse_datetime(exp) < timezone.now():
-        return JsonResponse({'status': 'expired'}, status=400)
+    try:
+        payload = signing.loads(token, salt='login-code', max_age=600)
+    except signing.SignatureExpired:
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'expired'}, status=400)
+        return redirect(f"{reverse('login')}?message=That+code+has+expired.+Request+a+new+one.&email={email}")
+    except signing.BadSignature:
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'invalid_code'}, status=400)
+        return redirect(f"{reverse('login')}?message=Invalid+code.&email={email}&verify=1")
 
-    # Require a RosterEntry for the email (authoritative source)
-    roster = RosterEntry.objects.filter(email__iexact=email).first()
-    if not roster:
-        return JsonResponse({'status': 'email_not_found'}, status=400)
+    token_email = payload.get('email')
+    token_code = payload.get('code')
+    if token_email != email or token_code != code:
+        if _wants_json_response(request):
+            return JsonResponse({'status': 'invalid_code'}, status=400)
+        return redirect(f"{reverse('login')}?message=Invalid+code.&email={email}&verify=1")
 
-    # find or create user from roster
+    # find or create user by email or roster
     User = get_user_model()
-    user, created = User.objects.get_or_create(
-        username=roster.member_id,
-        defaults={'email': email}
-    )
-    if created:
-        user.set_unusable_password()
-        user.first_name = roster.first_name or ''
-        user.last_name = roster.last_name or ''
-        user.save()
+    user = User.objects.filter(email__iexact=email).first()
+    if not user:
+        roster = RosterEntry.objects.filter(email__iexact=email).first()
+        if roster:
+            username = roster.member_id
+            user, created = User.objects.get_or_create(username=username, defaults={'email': email})
+            if created:
+                user.set_unusable_password()
+                user.first_name = roster.first_name or ''
+                user.last_name = roster.last_name or ''
+                user.save()
+        else:
+            # fallback: create user with localpart username
+            local = email.split('@', 1)[0]
+            user, created = User.objects.get_or_create(username=local, defaults={'email': email})
+            if created:
+                user.set_unusable_password()
+                user.save()
 
     # log in the user
     login(request, user)
-    # cleanup
-    try:
-        del request.session[key]
-        del request.session[exp_key]
-    except Exception:
-        pass
-    return JsonResponse({'status': 'ok'})
+    if _wants_json_response(request):
+        return JsonResponse({'status': 'ok'})
+    return redirect('official-dashboard')
 
 
 @login_required
@@ -647,7 +674,7 @@ def delete_session_csv(request, session_id):
 
 def load_roster_if_empty():
     # path to the provided CSV file (adjust if you place it elsewhere)
-    csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'Private Roster PNS Jan 2026.xlsx - 01.09.2026.csv')
+    csv_path = os.path.join(os.path.dirname(__file__), 'data', 'roster.csv')
     if RosterEntry.objects.exists():
         return
     if not os.path.exists(csv_path):
@@ -734,6 +761,11 @@ def login_view(request):
     except Exception:
         # don't block login if roster load fails
         pass
+    message = request.GET.get('message') or ''
+    email = request.GET.get('email') or ''
+    token = request.GET.get('token') or ''
+    show_verify = request.GET.get('verify') == '1' or bool(email)
+
     if request.method == "POST":
         member_id = request.POST.get("member_id")
         password = request.POST.get("password")
@@ -782,7 +814,12 @@ def login_view(request):
             "message": "Invalid member ID and/or password."
         })
     else:
-        return render(request, "meets/login.html")
+        return render(request, "meets/login.html", {
+            "message": message,
+            "email": email,
+            "token": token,
+            "show_verify": show_verify,
+        })
 
 
 def logout_view(request):
@@ -791,8 +828,145 @@ def logout_view(request):
 
 
 def register(request):
-    """Registration removed — users are created automatically from the roster on login."""
-    return redirect('login')
+    # ensure roster is loaded into DB before handling registration
+    try:
+        load_roster_if_empty()
+    except Exception:
+        # don't block registration if roster load fails
+        pass
+    
+    message = request.GET.get('message') or ''
+    member_id = request.GET.get('member_id') or ''
+    email = request.GET.get('email') or ''
+    token = request.GET.get('token') or ''
+    show_verify = request.GET.get('verify') == '1' or bool(token)
+
+    if request.method == "POST":
+        action = request.POST.get('action') or 'request_code'
+        member_id = (request.POST.get("member_id") or '').strip()
+        email = (request.POST.get("email") or '').strip()
+
+        if action == 'request_code':
+            roster, err = _validate_registration_identity(member_id, email)
+            if err:
+                return render(request, "meets/register.html", {
+                    "message": err,
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+
+            code = _generate_code()
+            token = signing.dumps({'member_id': member_id, 'email': email, 'code': code}, salt='register-code')
+            try:
+                send_mail(
+                    'Your registration code',
+                    f'Your registration code is: {code}',
+                    settings.DEFAULT_FROM_EMAIL,
+                    [email],
+                    fail_silently=False,
+                )
+            except Exception:
+                return render(request, "meets/register.html", {
+                    "message": "Unable to send verification code. Check email settings and try again.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+
+            return render(request, "meets/register.html", {
+                "message": f"Code sent to {email}.",
+                "member_id": member_id,
+                "email": email,
+                "token": token,
+                "show_verify": True,
+            })
+
+        if action == 'verify_code':
+            code = (request.POST.get('code') or '').strip()
+            token = (request.POST.get('token') or '').strip()
+            if not member_id or not email or not code or not token:
+                return render(request, "meets/register.html", {
+                    "message": "Enter your member ID, email, and verification code.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": token,
+                    "show_verify": True,
+                })
+
+            try:
+                payload = signing.loads(token, salt='register-code', max_age=600)
+            except SignatureExpired:
+                return render(request, "meets/register.html", {
+                    "message": "That code has expired. Request a new one.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+            except BadSignature:
+                return render(request, "meets/register.html", {
+                    "message": "Invalid verification code.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+
+            if payload.get('member_id') != member_id or payload.get('email') != email or payload.get('code') != code:
+                return render(request, "meets/register.html", {
+                    "message": "Invalid verification code.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": token,
+                    "show_verify": True,
+                })
+
+            roster, err = _validate_registration_identity(member_id, email)
+            if err:
+                return render(request, "meets/register.html", {
+                    "message": err,
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+
+            try:
+                user = User.objects.create_user(username=member_id, email=email)
+                user.set_unusable_password()
+                user.first_name = roster.first_name or ''
+                user.last_name = roster.last_name or ''
+                user.save()
+            except IntegrityError:
+                return render(request, "meets/register.html", {
+                    "message": "Registration failed. Try again.",
+                    "member_id": member_id,
+                    "email": email,
+                    "token": '',
+                    "show_verify": False,
+                })
+
+            login(request, user)
+            return HttpResponseRedirect(reverse("official-dashboard"))
+
+        return render(request, "meets/register.html", {
+            "message": "Invalid registration action.",
+            "member_id": member_id,
+            "email": email,
+            "token": token,
+            "show_verify": show_verify,
+        })
+
+    return render(request, "meets/register.html", {
+        "message": message,
+        "member_id": member_id,
+        "email": email,
+        "token": token,
+        "show_verify": show_verify,
+    })
 
 
 # ===============================
