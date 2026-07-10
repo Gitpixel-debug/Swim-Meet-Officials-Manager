@@ -165,6 +165,10 @@ def generate_deck_assignments(session):
         extra_role_counts[role] = 1  # 1 per pool
 
     checked = SessionAssignment.objects.filter(session=session, checked_in=True).select_related('official')
+    if session.status == 'in_progress':
+        on_break_ids = DeckAssignment.objects.filter(session=session, on_break=True).values_list('official_id', flat=True)
+        checked = checked.exclude(official_id__in=on_break_ids)
+
     officials = [sa.official for sa in checked]
 
     all_assignments = {}

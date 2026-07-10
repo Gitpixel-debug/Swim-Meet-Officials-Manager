@@ -237,6 +237,10 @@ def deck_assignments(request, session_id):
         return HttpResponseForbidden('Not allowed')
 
     checked = SessionAssignment.objects.filter(session=session, checked_in=True).select_related('official')
+    if session.status == 'in_progress':
+        on_break_ids = DeckAssignment.objects.filter(session=session, on_break=True).values_list('official_id', flat=True)
+        checked = checked.exclude(official_id__in=on_break_ids)
+
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'generate':
@@ -1060,7 +1064,7 @@ def official_dashboard(request):
         enrollments = enrollments.filter(session__date__gt=today)
 
     # Available meets remain independent (show upcoming meets)
-    available_meets = Meet.objects.filter(start_date__gt=today)
+    available_meets = Meet.objects.filter(sessions__date__gte=today).distinct().order_by('start_date')
 
     # apply search term to available meets only
     if q:
@@ -1271,10 +1275,13 @@ def session_simulation(request, session_id):
             'pool_number': da.pool_number,
         })
 
+    active_deck_count = sum(1 for od in officials_data if not od['on_break'])
+
     num_pools = session.meet.num_pools or 1
     return render(request, 'meets/session/simulation.html', {
         'session': session,
         'officials_data': officials_data,
+        'active_deck_count': active_deck_count,
         'progress_pct': round(progress_pct, 1),
         'elapsed_minutes': int(elapsed_sec // 60),
         'remaining_minutes': int(remaining_sec // 60),
@@ -1318,11 +1325,14 @@ def session_simulation_data(request, session_id):
             'hours_so_far': hours_so_far,
         })
 
+    active_deck_count = sum(1 for o in officials if not o['on_break'])
+
     return JsonResponse({
         'status': session.status,
         'progress_pct': round(progress_pct, 1),
         'elapsed_minutes': int(elapsed_sec // 60),
         'remaining_minutes': int(remaining_sec // 60),
+        'active_deck_count': active_deck_count,
         'officials': officials,
     })
 

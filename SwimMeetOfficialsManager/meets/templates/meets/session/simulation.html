@@ -3,7 +3,7 @@
 {% block title %}Session Simulation — {{ session }}{% endblock %}
 
 {% block body %}
-<div class="fade-in-up">
+<div class="fade-in-up page-shell">
 
   <!-- Header card -->
   <div class="header-card">
@@ -51,7 +51,7 @@
         <div class="stat-icon">👥</div>
         <div class="stat-body">
           <div class="stat-label">Officials on Deck</div>
-          <div class="stat-value" id="deck-count">{{ officials_data|length }}</div>
+          <div class="stat-value" id="deck-count">{{ active_deck_count }}</div>
         </div>
       </div>
     </div>
@@ -221,6 +221,7 @@
       .then(function(data){
         // Update timer
         document.getElementById('elapsed-time').textContent = formatMinutes(data.elapsed_minutes);
+        document.getElementById('deck-count').textContent = data.active_deck_count;
         
         // Update officials
         data.officials.forEach(function(o){
@@ -399,5 +400,34 @@
 })();
 </script>
 {% endif %}
+
+<style>
+.page-shell {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 16px 20px;
+}
+
+@media (max-width: 768px) {
+  .page-shell {
+    padding: 0 12px 16px;
+  }
+
+  .header-card .d-flex {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .header-card .d-flex.gap-2 {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .header-card .btn {
+    flex: 1 1 auto;
+    min-width: 140px;
+  }
+}
+</style>
 
 {% endblock %}
