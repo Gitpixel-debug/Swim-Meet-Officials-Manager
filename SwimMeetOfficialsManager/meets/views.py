@@ -992,10 +992,10 @@ def official_dashboard(request):
     # Get meets/sessions the user is enrolled in via SessionAssignment
     enrollments = SessionAssignment.objects.filter(official=user).select_related('session__meet', 'session')
 
-    # Volunteer hours: sum of hours_worked from past sessions where checked_in or hours > 0
+    # Volunteer hours: count of distinct meets where the user "did something" in the past
     today = timezone.now().date()
-    past_sessions = enrollments.filter(session__date__lt=today).filter(Q(hours_worked__gt=0) | Q(checked_in=True))
-    volunteer_hours = round(past_sessions.aggregate(total=Sum('hours_worked'))['total'] or 0)
+    meets_done_qs = enrollments.filter(session__date__lt=today).filter(Q(hours_worked__gt=0) | Q(checked_in=True)).values_list('session__meet', flat=True).distinct()
+    volunteer_hours = meets_done_qs.count()
 
     # categorize enrollments for summary (keeps previous behavior for stats)
     past_enrollments = []
@@ -1024,8 +1024,8 @@ def official_dashboard(request):
     else:
         enrollments = enrollments.filter(session__date__gt=today)
 
-    # Available meets — show all meets
-    available_meets = Meet.objects.all().order_by('-start_date')
+    # Available meets remain independent (show upcoming meets)
+    available_meets = Meet.objects.filter(start_date__gt=today)
 
     # apply search term to available meets only
     if q:
