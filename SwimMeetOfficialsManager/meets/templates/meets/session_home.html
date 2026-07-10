@@ -11,6 +11,16 @@
             <div>
                         <a class="btn btn-outline-secondary me-2" href="{% url 'meet-home' session.meet.id %}">Back to Meet</a>
                         {% if request.user == session.meet.created_by %}
+                            {% if session.status == 'not_started' %}
+                                <form method="post" action="{% url 'start-session' session.id %}" style="display:inline">
+                                    {% csrf_token %}
+                                    <button class="btn btn-success me-2" type="submit">Start Session</button>
+                                </form>
+                            {% elif session.status == 'in_progress' %}
+                                <a class="btn btn-warning me-2" href="{% url 'session-simulation' session.id %}">Active Session Dashboard</a>
+                            {% elif session.status == 'ended' %}
+                                <a class="btn btn-info me-2" href="{% url 'session-results' session.id %}">View Final Logs</a>
+                            {% endif %}
                             <a class="btn btn-outline-primary me-2" href="{% url 'deck-assignments' session.id %}">Manage Deck Assignments</a>
                         {% endif %}
 
@@ -30,7 +40,135 @@
       </div>
     </div>
 
+    
+    <!-- Add Official -->
+    {% if request.user == session.meet.created_by %}
     <hr>
+    <div class="card p-4 shadow-sm mb-4">
+      <h5 class="section-title">Add &amp; Check In Official</h5>
+      <form id="add-official-form" class="row g-3">
+        {% csrf_token %}
+        <div class="col-md-4">
+          <input type="text" class="form-control" id="search-name" placeholder="Search by name..." autocomplete="off">
+          <div id="search-results" class="list-group mt-2" style="display:none; position:absolute; z-index:1000; width: 300px;"></div>
+        </div>
+        <div class="col-md-4">
+          <select class="form-select" id="role-select" disabled>
+            <option value="">Select person first</option>
+          </select>
+          <div id="qualified-roles" class="form-text mt-1 text-muted"></div>
+        </div>
+        <div class="col-md-4">
+          <button type="submit" class="btn btn-primary" id="add-official-btn" disabled>Add &amp; Check In</button>
+        </div>
+      </form>
+    </div>
+    
+    <script>
+    (function(){
+      var addOfficialUrl = "{% url 'add-official' session.id %}";
+      var searchUrl = "{% url 'search-officials' session.id %}";
+      var csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+      
+      var searchInput = document.getElementById('search-name');
+      var resultsDiv = document.getElementById('search-results');
+      var roleSelect = document.getElementById('role-select');
+      var selectedOfficial = null;
+      var searchTimeout = null;
+
+      if(searchInput) {
+          searchInput.addEventListener('input', function(e){
+            clearTimeout(searchTimeout);
+            var q = e.target.value.trim();
+            if (q.length < 2) {
+              resultsDiv.style.display = 'none';
+              return;
+            }
+            searchTimeout = setTimeout(function(){
+              fetch(searchUrl + '?q=' + encodeURIComponent(q))
+              .then(r=>r.json())
+              .then(data=>{
+                resultsDiv.innerHTML = '';
+                if(data.officials.length===0){
+                  resultsDiv.style.display = 'none';
+                  return;
+                }
+                resultsDiv.style.display = 'block';
+                data.officials.forEach(function(o){
+                  var item = document.createElement('a');
+                  item.className = 'list-group-item list-group-item-action';
+                  item.href = '#';
+                  item.innerText = o.name + ' (' + o.email + ')';
+                  item.addEventListener('click', function(ev){
+                    ev.preventDefault();
+                    searchInput.value = o.name;
+                    resultsDiv.style.display = 'none';
+                    selectedOfficial = o;
+                    
+                    roleSelect.innerHTML = '';
+                    o.qualified_roles.forEach(function(r){
+                      var opt = document.createElement('option');
+                      opt.value = r; opt.innerText = r;
+                      roleSelect.appendChild(opt);
+                    });
+                    
+                    if (o.qualified_roles.length === 0) {
+                      roleSelect.disabled = true;
+                      document.getElementById('add-official-btn').disabled = true;
+                      document.getElementById('qualified-roles').innerHTML = '<span class="text-danger">Not qualified for any roles</span>';
+                    } else {
+                      roleSelect.disabled = false;
+                      document.getElementById('add-official-btn').disabled = false;
+                      document.getElementById('qualified-roles').innerHTML = 'Qualified for: ' + o.qualified_roles.join(', ');
+                    }
+                  });
+                  resultsDiv.appendChild(item);
+                });
+              });
+            }, 300);
+          });
+      }
+
+      var addForm = document.getElementById('add-official-form');
+      if (addForm) {
+        addForm.addEventListener('submit', function(e){
+          e.preventDefault();
+          if (!selectedOfficial) {
+            alert('Please select an official');
+            return;
+          }
+          var role = roleSelect.value;
+          if (!role) {
+            alert('Please select a role');
+            return;
+          }
+          
+          var fd = new URLSearchParams();
+          fd.append('member_id', selectedOfficial.member_id);
+          fd.append('role', role);
+          
+          fetch(addOfficialUrl, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': csrfToken,
+              'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: fd
+          })
+          .then(r=>r.json())
+          .then(data=>{
+            if(data.success){
+              location.reload();
+            } else {
+              alert(data.error || 'Error adding official');
+            }
+          });
+        });
+      }
+    })();
+    </script>
+    {% endif %}
+
 
     <h4>Checked-in Officials</h4>
 
@@ -60,10 +198,9 @@
                 </td>
                 <td>{{ assignment.hours_worked }}</td>
                 <td>
-                    {% if is_meet_referee and meet_started %}
-                    <form method="post" action="{% url 'set-assignment-check-in' assignment.id %}" style="display:inline">
+                    {% if request.user == session.meet.created_by %}
+                    <form method="post" action="{% url 'referee-checkout-session' session.id assignment.id %}" style="display:inline">
                         {% csrf_token %}
-                        <input type="hidden" name="checked_in" value="0">
                         <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
                     </form>
                     {% endif %}
@@ -109,10 +246,9 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if is_meet_referee and meet_started %}
-                    <form method="post" action="{% url 'set-assignment-check-in' assignment.id %}" style="display:inline">
+                    {% if request.user == session.meet.created_by %}
+                    <form method="post" action="{% url 'referee-check-in' session.id assignment.id %}" style="display:inline">
                         {% csrf_token %}
-                        <input type="hidden" name="checked_in" value="1">
                         <button class="btn btn-sm btn-success" type="submit">Check In</button>
                     </form>
                     {% endif %}
@@ -152,17 +288,18 @@
                 </td>
                 <td>{{ a.hours_worked }}</td>
                 <td>
-                    {% if is_meet_referee and meet_started %}
-                    <form method="post" action="{% url 'set-assignment-check-in' a.id %}" style="display:inline">
+                    {% if request.user == session.meet.created_by %}
+                    {% if a.checked_in %}
+                    <form method="post" action="{% url 'referee-checkout-session' session.id a.id %}" style="display:inline">
                         {% csrf_token %}
-                        {% if a.checked_in %}
-                        <input type="hidden" name="checked_in" value="0">
                         <button class="btn btn-sm btn-outline-danger" type="submit">Remove</button>
-                        {% else %}
-                        <input type="hidden" name="checked_in" value="1">
-                        <button class="btn btn-sm btn-success" type="submit">Check In</button>
-                        {% endif %}
                     </form>
+                    {% else %}
+                    <form method="post" action="{% url 'referee-check-in' session.id a.id %}" style="display:inline">
+                        {% csrf_token %}
+                        <button class="btn btn-sm btn-success" type="submit">Check In</button>
+                    </form>
+                    {% endif %}
                     {% endif %}
                 </td>
                 <td>

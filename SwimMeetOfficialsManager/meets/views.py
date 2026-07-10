@@ -292,6 +292,12 @@ def deck_assignments(request, session_id):
                 assignments = json.loads(data or '{}')
             except Exception:
                 assignments = {}
+
+            old_assignments = {}
+            if session.status == 'in_progress':
+                for da in DeckAssignment.objects.filter(session=session).select_related('official'):
+                    old_assignments[str(da.official_id)] = {'role': da.role, 'email': da.official.email}
+
             finalize_and_save_assignments(session, assignments)
             # Also update VolunteerLog roles if session is in progress
             if session.status == 'in_progress':
@@ -300,7 +306,36 @@ def deck_assignments(request, session_id):
                         oid = int(oid_str)
                     except (ValueError, TypeError):
                         continue
-                    VolunteerLog.objects.filter(session=session, official_id=oid).update(role=info.get('role', ''))
+                    new_role = info.get('role', '')
+                    VolunteerLog.objects.filter(session=session, official_id=oid).update(role=new_role)
+
+                    # Notifications for role changes mid-session
+                    old_info = old_assignments.get(str(oid))
+                    if old_info and old_info['role'] != new_role:
+                        try:
+                            send_mail(
+                                f"Role Update: {session.meet.name} - Session {session.session_number}",
+                                f"Your assigned role has been updated to: {new_role}. Please report to your new position.",
+                                settings.DEFAULT_FROM_EMAIL,
+                                [old_info['email']],
+                                fail_silently=True,
+                            )
+                        except Exception:
+                            pass
+                    elif not old_info:
+                        user_obj = User.objects.filter(pk=oid).first()
+                        if user_obj:
+                            try:
+                                send_mail(
+                                    f"New Assignment: {session.meet.name} - Session {session.session_number}",
+                                    f"You have been assigned to: {new_role}. Please report to your position.",
+                                    settings.DEFAULT_FROM_EMAIL,
+                                    [user_obj.email],
+                                    fail_silently=True,
+                                )
+                            except Exception:
+                                pass
+
             messages.success(request, 'Deck assignments saved.')
             if session.status == 'in_progress':
                 return redirect('session-simulation', session_id=session.id)
@@ -1117,6 +1152,19 @@ def leave_session(request, assignment_id):
     assignment = get_object_or_404(SessionAssignment, pk=assignment_id)
     if assignment.official != request.user:
         return HttpResponseForbidden('Not allowed')
+        
+    try:
+        referee = assignment.session.meet.created_by
+        send_mail(
+            f"Official Left Session: {assignment.session.meet.name} - Session {assignment.session.session_number}",
+            f"{request.user.get_full_name() or request.user.username} has left the session.",
+            settings.DEFAULT_FROM_EMAIL,
+            [referee.email],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+        
     assignment.delete()
     messages.success(request, f"You have left {assignment.session.meet.name} - Session {assignment.session.session_number}.")
     return HttpResponseRedirect(reverse("official-dashboard"))
@@ -1169,8 +1217,19 @@ def start_session(request, session_id):
             official=sa.official,
             defaults={'role': role, 'hours_worked': 0},
         )
+        try:
+            position_msg = f"Your assigned role is: {role}." if role else "Please see the referee for your assignment."
+            send_mail(
+                f"Meet Started: {session.meet.name} - Session {session.session_number}",
+                f"The session has officially started! {position_msg} Please head to your position.",
+                settings.DEFAULT_FROM_EMAIL,
+                [sa.official.email],
+                fail_silently=True,
+            )
+        except Exception:
+            pass
 
-    messages.success(request, 'Session started! Volunteer hours are now being tracked.')
+    messages.success(request, 'Session started! Volunteer hours are now being tracked. Emails have been sent to checked-in officials.')
     return redirect('session-simulation', session_id=session.id)
 
 
@@ -1338,6 +1397,19 @@ def toggle_break(request, session_id, official_id):
         da.on_break = True
         da.break_started_at = now
     da.save()
+    
+    try:
+        status_msg = "You have been placed on break by the meet referee." if da.on_break else "Your break has ended. Please return to your position."
+        send_mail(
+            f"Break Status Updated: {session.meet.name} - Session {session.session_number}",
+            status_msg,
+            settings.DEFAULT_FROM_EMAIL,
+            [da.official.email],
+            fail_silently=True,
+        )
+    except Exception:
+        pass
+
     return JsonResponse({'on_break': da.on_break})
 
 
@@ -1399,8 +1471,6 @@ def add_official(request, session_id):
     session = get_object_or_404(Session, pk=session_id)
     if request.user != session.meet.created_by:
         return JsonResponse({'error': 'Not allowed'}, status=403)
-    if session.status != 'in_progress':
-        return JsonResponse({'error': 'Session not in progress'}, status=400)
 
     member_id = request.POST.get('member_id', '').strip()
     role = request.POST.get('role', '').strip()

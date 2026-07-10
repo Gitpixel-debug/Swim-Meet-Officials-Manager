@@ -50,11 +50,11 @@
     <input type="hidden" name="assignments" id="assignments-input">
 
     {% if num_pools == 1 %}
-    <div class="card p-4 mb-4">
+    <div class="card p-4 mb-4 shadow-sm border-0">
       <h5 class="section-title">Assignments</h5>
       <div class="table-responsive">
-        <table class="table" id="pool-table-1">
-          <thead>
+        <table class="table table-hover align-middle" id="pool-table-1">
+          <thead class="table-light">
             <tr>
               <th>Official</th>
               <th>Suggested Role</th>
@@ -98,14 +98,14 @@
     <div class="row g-3 mb-4">
       {% for pool_num in pool_range %}
       <div class="col-md-{% if num_pools == 2 %}6{% elif num_pools == 3 %}4{% else %}6{% endif %}">
-        <div class="card h-100" style="border-top:3px solid var(--primary)">
+        <div class="card h-100 shadow-sm border-0" style="border-top:3px solid var(--primary)">
           <div class="card-header d-flex align-items-center" style="background:var(--primary);color:#fff;border-radius:var(--card-radius) var(--card-radius) 0 0">
             <strong>Pool {{ pool_num }}</strong>
             <small class="ms-auto opacity-75">Drag officials here</small>
           </div>
           <div class="p-0 pool-drop-zone" data-pool="{{ pool_num }}">
-            <table class="table table-sm mb-0" id="pool-table-{{ pool_num }}">
-              <thead>
+            <table class="table table-hover align-middle table-sm mb-0" id="pool-table-{{ pool_num }}">
+              <thead class="table-light">
                 <tr>
                   <th style="width:38%">Official</th>
                   <th style="width:22%">Suggested</th>
